@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f7f7f5;
+  --surface: #ffffff;
+  --foreground: #1a1a1a;
+  --muted: #5c5c58;
+  --line: #e2e2dc;
+  --accent: #2f5bd3;
+  --accent-ink: #ffffff;
+  --danger: #b42318;
+  /* Sentiment marks (validated: blue/red diverging poles, gray neutral midpoint, amber mixed).
+     Used for swatches and chart fills only; text always stays in ink colors. */
+  --pos: #2a78d6;
+  --neu: #a8a8a2;
+  --mix: #eda100;
+  --neg: #e34948;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #121212;
+    --surface: #1b1b1b;
+    --foreground: #ececec;
+    --muted: #a3a3a0;
+    --line: #2e2e2c;
+    --accent: #7b9cff;
+    --accent-ink: #0d0d0d;
+    --danger: #ff8a80;
+    --pos: #3987e5;
+    --neu: #5a5a56;
+    --mix: #c98500;
+    --neg: #d63b3b;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-danger: var(--danger);
+  --color-pos: var(--pos);
+  --color-neg: var(--neg);
+  --color-neu: var(--neu);
+  --color-mix: var(--mix);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+.btn {
+  @apply inline-flex items-center gap-2 rounded-md border border-line bg-surface px-3 py-1.5 text-sm font-medium hover:border-foreground/40 disabled:opacity-50;
+}
+.btn-primary {
+  @apply inline-flex items-center gap-2 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink hover:opacity-90 disabled:opacity-50;
+}
+.card {
+  @apply rounded-lg border border-line bg-surface p-4;
+}
+.input {
+  @apply w-full rounded-md border border-line bg-surface px-3 py-2 text-sm focus:outline-2 focus:outline-accent;
+}
+.chip {
+  @apply inline-flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-xs;
+}
