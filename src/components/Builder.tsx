@@ -27,9 +27,9 @@ const CHANNELS: { id: Channel; label: string; live: boolean }[] = [
   { id: "email", label: "Email", live: true },
   { id: "push", label: "Push", live: false },
   { id: "sms", label: "SMS", live: false },
-  { id: "slack", label: "Slack", live: false },
-  { id: "discord", label: "Discord", live: false },
-  { id: "webhook", label: "Webhook", live: false },
+  { id: "slack", label: "Slack", live: true },
+  { id: "discord", label: "Discord", live: true },
+  { id: "webhook", label: "Webhook", live: true },
 ];
 
 interface FormState {

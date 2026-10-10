@@ -85,6 +85,10 @@ ${top
 
 /** Send through Resend's HTTP API when RESEND_API_KEY and DIGEST_TO are configured. */
 export async function sendDigestEmail(digest: Digest): Promise<{ sent: boolean; reason?: string }> {
+  return sendEmail(digest.subject, digest.html, digest.text);
+}
+
+export async function sendEmail(subject: string, html: string, text: string): Promise<{ sent: boolean; reason?: string }> {
   const key = process.env.RESEND_API_KEY;
   const to = process.env.DIGEST_TO;
   if (!key || !to) return { sent: false, reason: "Set RESEND_API_KEY and DIGEST_TO to email digests." };
@@ -94,9 +98,9 @@ export async function sendDigestEmail(digest: Digest): Promise<{ sent: boolean; 
     body: JSON.stringify({
       from: process.env.DIGEST_FROM ?? "Earshot <digest@resend.dev>",
       to: to.split(",").map((s) => s.trim()),
-      subject: digest.subject,
-      html: digest.html,
-      text: digest.text,
+      subject,
+      html,
+      text,
     }),
     signal: AbortSignal.timeout(15_000),
   });

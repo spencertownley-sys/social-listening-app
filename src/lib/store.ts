@@ -19,8 +19,27 @@ export interface IngestRun {
   passedPreFilter: number;
   enriched: number;
   matches: number;
+  alerts?: number;
   enrichModel: string;
   connectors: { network: string; name: string; fetched: number; error?: string }[];
+}
+
+export interface AppNotification {
+  id: string;
+  profileId: string;
+  kind: "realtime" | "spike" | "digest";
+  title: string;
+  body: string;
+  postIds: string[];
+  channels: string[]; // where it was delivered, e.g. ["in_app", "email"]
+  createdAt: string;
+  read: boolean;
+}
+
+export interface AlertState {
+  lastDigestAt?: string;
+  lastRealtimeAt?: string;
+  lastSpikeAt?: string;
 }
 
 export interface StoreData {
@@ -33,6 +52,8 @@ export interface StoreData {
   feedback: Feedback[];
   learning: Record<string, LearningState>;
   runs: IngestRun[];
+  notifications: AppNotification[];
+  alertState: Record<string, AlertState>;
 }
 
 export const RETENTION_DAYS = 90;
@@ -48,6 +69,8 @@ function emptyData(): StoreData {
     feedback: [],
     learning: {},
     runs: [],
+    notifications: [],
+    alertState: {},
   };
 }
 
@@ -79,6 +102,7 @@ function applyRetention(data: StoreData): void {
   }
   for (const [id, m] of Object.entries(data.matches)) if (!data.posts[m.postId]) delete data.matches[id];
   data.runs = data.runs.slice(-50);
+  data.notifications = data.notifications.slice(-500);
 }
 
 async function persist(data: StoreData): Promise<void> {

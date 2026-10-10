@@ -10,10 +10,11 @@ what is stubbed, and the calls made where the PRD left a choice open.
 | Where does the code live? | `social-listening-app/` in CruiseNewsYouCanUse | The dedicated repo `spencertownley-sys/social-listening-app` is empty and this session can only push here. Move with `git subtree split --prefix social-listening-app` and push to the new repo when ready. |
 | Launch persona (open question 1) | Not decided. Built **connector-agnostic** with creators' networks first (Bluesky, YouTube, RSS, Mastodon) | These are the PRD's cheap, legal Phase 1 networks either way. Small-business networks (Facebook/X) slot in as connectors later. |
 | Storage | A JSON-file store behind a `Store` interface for local dev; Supabase schema with RLS written in `supabase/migrations/` | Lets the app run with zero setup. The Supabase adapter is the next backend task. |
-| Auth | Single local user/workspace for now | P0 sign-in arrives with Supabase Auth (email + Google). |
+| Auth | One shared workspace behind a password gate (`APP_PASSWORD`) on the hosted site | Multi-user sign-in (email + Google) arrives with Supabase Auth. |
 | AI models | Enrichment: `claude-haiku-5-5` (PRD: "small fast model at volume"). Profile drafting: `claude-opus-5-5`. Both configurable through env. | If `ANTHROPIC_API_KEY` is unset, both fall back to a local heuristic so the app still works offline. |
 | Semantic topics (layer 4) | Keyword-expansion match for now (topic sentence → key terms); embeddings + pgvector later | Keeps the MVP free of a vector store. |
-| Queue | In-process pipeline run (button or `POST /api/ingest`) | Swap for Upstash/Redis streams when moving workers to Railway. |
+| Queue / schedule | In-process scheduler on the Railway server (every `INGEST_INTERVAL_MINUTES`), plus `POST /api/cron` | Swap for a separate worker + Upstash/Redis streams at scale. |
+| Hosting | Railway: one Next.js service, persistent volume at `/data` for the JSON store | Move to Supabase Postgres before multi-user. |
 
 ## Phase 1 checklist
 
@@ -48,18 +49,20 @@ what is stubbed, and the calls made where the PRD left a choice open.
 **Digests**
 - [x] Digest builder (daily/weekly) with a preview page
 - [x] Email delivery through Resend when `RESEND_API_KEY` and `DIGEST_TO` are set
-- [ ] Scheduled sending (cron on Railway/Vercel)
-- [ ] In-app notifications
+- [x] Scheduled listening + alerts (in-process scheduler, `/api/cron`)
+- [x] In-app notifications with unread badge
+- [x] Real-time alerts, spike alerts (×N the 7-day hourly baseline), quiet hours, daily caps
+- [x] Slack, Discord and webhook channels (env-configured URLs)
 
 **Platform**
+- [x] Password gate for the hosted site, live on Railway
 - [x] Supabase SQL migration for the full data model with row-level security
 - [ ] Supabase store adapter + Auth
 - [ ] Stripe billing and plan limits (Phase 2)
 
 ## Next steps, in order
 
-1. Supabase adapter for `Store`, plus email/Google sign-in.
-2. Bluesky Jetstream worker for real-time ingest, deployed on Railway.
-3. Scheduled digests + in-app notifications.
-4. Embedding-based semantic topics (pgvector).
-5. Phase 2 connectors: Reddit, Threads; Slack/push alerts; spike detection.
+1. Supabase adapter for `Store`, plus email/Google sign-in (multi-user).
+2. Bluesky Jetstream worker for real-time ingest.
+3. Embedding-based semantic topics (pgvector).
+4. Phase 2 connectors: Reddit, Threads; push/SMS alerts; Stripe billing.

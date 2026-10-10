@@ -1,3 +1,4 @@
+import { runAlerts } from "./alerts";
 import { blueskyConnector } from "./connectors/bluesky";
 import { demoPosts } from "./connectors/demo";
 import { mastodonConnector } from "./connectors/mastodon";
@@ -72,6 +73,8 @@ async function enrichCandidates(data: StoreData, profiles: ListeningProfile[], s
 export interface IngestOptions {
   demo?: boolean;
   sinceHours?: number;
+  /** Send alerts/digests after matching (default true). */
+  alerts?: boolean;
 }
 
 export async function runIngest(opts: IngestOptions = {}): Promise<IngestRun> {
@@ -133,6 +136,8 @@ export async function runIngest(opts: IngestOptions = {}): Promise<IngestRun> {
       }
     }
 
+    const alerts = opts.alerts === false ? [] : await runAlerts(data);
+
     const run: IngestRun = {
       id: newId("run"),
       startedAt,
@@ -142,6 +147,7 @@ export async function runIngest(opts: IngestOptions = {}): Promise<IngestRun> {
       passedPreFilter: candidates.length,
       enriched: enriched.length,
       matches: matchCount,
+      alerts: alerts.length,
       enrichModel: claudeEnabled() ? ENRICH_MODEL : "heuristic-v1",
       connectors: connectorLog,
     };

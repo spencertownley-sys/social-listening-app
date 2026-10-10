@@ -39,6 +39,18 @@ npm run build
 - Feed with filters, "why this matched", confidence, and five feedback actions that change ranking
 - Dashboard: volume by sentiment, sentiment split, networks, top authors, intents
 - Digest preview and email via Resend
+- Scheduled listening (hourly by default) with real-time, spike and digest alerts, quiet hours
+  and daily caps; in-app notifications plus email, Slack, Discord and webhook delivery
+- Password-protected hosting (set `APP_PASSWORD`)
+
+## Hosting (Railway)
+
+The live site runs as one Railway service built from this folder (root directory
+`social-listening-app`), with a persistent volume mounted at `/data` and
+`EARSHOT_DATA_FILE=/data/earshot.json`. Set `APP_PASSWORD` (and optionally `AUTH_SECRET`) to
+protect it, and add any of the optional keys below in the service's Variables tab. The server
+listens on a schedule (`INGEST_INTERVAL_MINUTES`, default 60); `POST /api/cron` with
+`Authorization: Bearer $CRON_SECRET` runs a cycle on demand.
 
 Data is stored in `.data/earshot.json` (git-ignored). The Supabase schema for production,
 with row-level security, is in `supabase/migrations/0001_init.sql`.
