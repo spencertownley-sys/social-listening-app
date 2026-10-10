@@ -75,6 +75,6 @@ what is stubbed, and the calls made where the PRD left a choice open.
 
 ## Next steps, in order
 
-1. Supabase adapter for `Store`, plus email/Google sign-in (multi-user).
-3. Embedding-based semantic topics (pgvector).
-4. Phase 2 connectors: Reddit, Threads; push/SMS alerts; Stripe billing.
+1. Supabase adapter for `Store`, plus email/Google sign-in (multi-user), and backups.
+2. Embedding-based semantic topics (pgvector).
+3. Push/SMS alerts; Stripe billing and plan limits.
