@@ -1,25 +1,24 @@
+import { redirect } from "next/navigation";
+import { currentContext, needsSetup } from "@/lib/accounts";
+import { AuthCard, Field, FormError } from "@/components/AuthCard";
+
 export const dynamic = "force-dynamic";
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; error?: string }> }) {
+  if (await needsSetup()) redirect("/setup");
+  if (await currentContext()) redirect("/");
   const { next = "/", error } = await searchParams;
   return (
-    <div className="mx-auto mt-16 max-w-sm">
-      <form method="post" action="/api/login" className="card space-y-4">
-        <h1 className="text-xl font-semibold">Sign in to Earshot</h1>
+    <AuthCard title="Sign in to Earshot" note="New here? Ask someone in your workspace for an invite link.">
+      <form method="post" action="/api/login" className="space-y-4">
         <input type="hidden" name="next" value={next} />
-        <label className="block space-y-1">
-          <span className="text-sm font-medium">Password</span>
-          <input className="input" type="password" name="password" autoComplete="current-password" required autoFocus />
-        </label>
-        {error && (
-          <p className="text-sm text-danger" role="alert">
-            That password didn&apos;t match.
-          </p>
-        )}
+        <Field label="Email" type="email" name="email" autoComplete="email" required autoFocus />
+        <Field label="Password" type="password" name="password" autoComplete="current-password" required />
+        <FormError message={error ? "That email and password didn't match." : undefined} />
         <button className="btn-primary w-full justify-center" type="submit">
           Sign in
         </button>
       </form>
-    </div>
+    </AuthCard>
   );
 }

@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
+import { apiContext } from "@/lib/http";
 import { mutate } from "@/lib/store";
 
 /** DELETE: remove the bundled demo posts and everything derived from them. Real posts stay. */
 export async function DELETE() {
+  const ctx = await apiContext("owner");
+  if (ctx instanceof NextResponse) return ctx;
   const removed = await mutate((data) => {
     const ids = Object.values(data.posts)
       .filter((p) => /^demo\d+$/.test(p.externalId))

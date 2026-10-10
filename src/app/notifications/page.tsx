@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { visibleProfiles } from "@/lib/accounts";
+import { pageContext } from "@/lib/http";
 import { read } from "@/lib/store";
 import { MarkAllRead } from "@/components/MarkAllRead";
 import { timeAgo } from "@/components/ui";
@@ -8,9 +10,10 @@ export const dynamic = "force-dynamic";
 const KIND_LABEL = { realtime: "New mentions", spike: "Spike", digest: "Digest" } as const;
 
 export default async function NotificationsPage() {
+  const ctx = await pageContext();
   const data = await read();
-  const names = new Map(data.profiles.map((p) => [p.id, p.config.name]));
-  const list = [...data.notifications].reverse().slice(0, 100);
+  const names = new Map(visibleProfiles(data, ctx).map((p) => [p.id, p.config.name]));
+  const list = data.notifications.filter((n) => names.has(n.profileId)).reverse().slice(0, 100);
   const unread = list.filter((n) => !n.read).length;
   return (
     <div className="space-y-4">

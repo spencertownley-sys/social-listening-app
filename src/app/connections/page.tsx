@@ -1,12 +1,14 @@
 import { CONNECTION_INFO, missingEnv, UNAVAILABLE } from "@/lib/connections";
 import { claudeEnabled } from "@/lib/enrich/claude";
 import { jetstreamStatus } from "@/lib/jetstream";
+import { pageContext } from "@/lib/http";
 import { read } from "@/lib/store";
 import { timeAgo } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
 export default async function ConnectionsPage() {
+  await pageContext();
   const data = await read();
   const lastRun = [...data.runs].reverse().find((r) => r.connectors.some((c) => c.network !== "demo"));
   const result = new Map(lastRun?.connectors.map((c) => [c.network, c]) ?? []);

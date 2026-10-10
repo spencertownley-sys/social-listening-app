@@ -3,7 +3,7 @@ import { runAlerts } from "../alerts";
 import { buildDigest } from "../digest";
 import { eventToPost } from "../jetstream";
 import { parseProfileConfig, type ListeningProfile } from "../profile";
-import type { StoreData } from "../store";
+import { emptyData, type StoreData } from "../store";
 import type { Post, Sentiment } from "../types";
 
 const NOW = new Date("2026-10-10T12:00:00Z");
@@ -48,7 +48,7 @@ function store(spikeOn: "negative" | "all", sentiments: Sentiment[]): StoreData 
     updatedAt: "",
   };
   const data: StoreData = {
-    workspace: { id: "w", name: "w" },
+    ...emptyData(),
     profiles: [profile],
     versions: [],
     posts: {},

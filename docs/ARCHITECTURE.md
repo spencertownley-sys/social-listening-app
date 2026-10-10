@@ -29,8 +29,11 @@ How the PRD's pipeline maps onto the code. See [PRD.md](./PRD.md) for the why an
 | `src/lib/assist.ts` | Plain English → profile draft (Claude, heuristic fallback) |
 | `src/lib/learning.ts` | Feedback → per-profile token weights, mutes, sentiment corrections |
 | `src/lib/analytics.ts` / `digest.ts` | Feed assembly, dashboard aggregates, digest email |
-| `src/lib/store.ts` | Storage interface; JSON-file implementation for local dev |
-| `supabase/migrations/0001_init.sql` | Production schema with row-level security |
+| `src/lib/store.ts` | Storage: in-memory dataset, serialized writes, JSON-file backend |
+| `src/lib/store-pg.ts` | Postgres backend: incremental writes of posts/enrichments/matches |
+| `src/lib/auth.ts` / `accounts.ts` | Signed session cookies; users, workspaces, roles, invites |
+| `src/proxy.ts` | Sign-in check on every request except the public auth pages |
+| `supabase/migrations/0001_init.sql` | Earlier Supabase schema with row-level security (not used) |
 
 ## Key design choices
 
@@ -48,6 +51,12 @@ How the PRD's pipeline maps onto the code. See [PRD.md](./PRD.md) for the why an
 - **Connectors are plug-ins.** Adding Reddit/Threads/X is a new file implementing
   `Connector`; nothing else changes. `LIVE_NETWORKS` in `profile.ts` marks what is wired up.
 - **No scraping.** Every connector uses an official API or public feed.
+- **Shared posts, private profiles.** Posts and labels are ingested once and shared; profiles
+  belong to a workspace, and matches, feedback, learning and notifications are reached only
+  through a profile the user can see. Every API route checks the user's role (owner, editor,
+  viewer) before reading or writing.
+- **Memory first, Postgres durable.** One server process holds the dataset in memory; each
+  write sends only changed rows to Postgres in one transaction.
 
 ## Models
 
@@ -61,7 +70,7 @@ error, or missing credentials.
 
 ## Moving to production
 
-1. Implement `Store` against Supabase (`0001_init.sql`), with Supabase Auth for sign-in.
-2. Move `runIngest` into a Railway worker on a schedule; add a Bluesky Jetstream consumer for real time.
+1. Done: Postgres storage and email + password accounts. Next: Google sign-in and password reset by email.
+2. Move `runIngest` into a separate Railway worker (the Bluesky Jetstream consumer already runs in-process).
 3. Put a queue (Upstash/Redis streams) between connectors and enrichment.
 4. Replace `semanticMatch` with embeddings in `enrichments.embedding` (pgvector).

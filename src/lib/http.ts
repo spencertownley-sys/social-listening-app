@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { AccountError, canWrite, currentContext, type Context } from "./accounts";
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { QuerySyntaxError } from "./query";
@@ -24,4 +26,31 @@ export async function jsonBody(req: Request): Promise<Record<string, unknown>> {
   } catch {
     return {};
   }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Access control. Every API route except login/setup/signup/health/cron starts with one of these.
+
+
+type Need = "read" | "write" | "owner";
+
+/** The signed-in context, or the 401/403 response to return. */
+export async function apiContext(need: Need = "read"): Promise<Context | NextResponse> {
+  const ctx = await currentContext();
+  if (!ctx) return NextResponse.json({ error: "Sign in required" }, { status: 401 });
+  if (need === "write" && !canWrite(ctx)) return NextResponse.json({ error: "Your role is read-only." }, { status: 403 });
+  if (need === "owner" && ctx.role !== "owner") return NextResponse.json({ error: "Only workspace owners can do that." }, { status: 403 });
+  return ctx;
+}
+
+/** For server-rendered pages: the signed-in context, or a redirect to sign in. */
+export async function pageContext(): Promise<Context> {
+  const ctx = await currentContext();
+  if (!ctx) redirect("/login");
+  return ctx;
+}
+
+export function accountErrorResponse(e: unknown): NextResponse {
+  if (e instanceof AccountError) return NextResponse.json({ error: e.message }, { status: e.status });
+  return errorResponse(e);
 }

@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { detectSpike, inQuietHours, runAlerts } from "../alerts";
 import { feedFor } from "../analytics";
-import { checkPassword, isCronAuthorized, isValidSession, sessionToken } from "../auth";
+import { checkSetupCode, isCronAuthorized, signSession, verifySession } from "../auth";
 import { demoPosts } from "../connectors/demo";
 import { enrichHeuristic } from "../enrich/heuristic";
 import { compileProfile, matchPost } from "../matcher";
 import { parseProfileConfig, type ListeningProfile, type ProfileConfigInput } from "../profile";
-import type { StoreData } from "../store";
+import { emptyData, type StoreData } from "../store";
 
 const NOW = new Date("2026-10-08T12:00:00Z");
 
@@ -22,7 +22,7 @@ function storeWith(input: ProfileConfigInput, createdAt = "2026-10-01T00:00:00Z"
   };
   const posts = demoPosts(NOW.getTime());
   const data: StoreData = {
-    workspace: { id: "ws", name: "ws" },
+    ...emptyData(),
     profiles: [profile],
     versions: [],
     posts: Object.fromEntries(posts.map((p) => [p.id, p])),
@@ -122,21 +122,24 @@ describe("auth", () => {
     process.env = { ...saved };
   });
 
-  it("is open when no password is configured", async () => {
-    delete process.env.APP_PASSWORD;
-    expect(await isValidSession(undefined)).toBe(true);
+  it("signs sessions that expire and break when the secret changes", async () => {
+    process.env.AUTH_SECRET = "first";
+    const token = await signSession("usr_1", 3);
+    expect(await verifySession(token)).toMatchObject({ u: "usr_1", v: 3 });
+    expect(await verifySession(token.replace(/^./, "x"))).toBeNull();
+    expect(await verifySession("forged")).toBeNull();
+    expect(await verifySession(undefined)).toBeNull();
+    expect(await verifySession(token, Date.now() + 31 * 86_400_000)).toBeNull();
+    process.env.AUTH_SECRET = "rotated";
+    expect(await verifySession(token)).toBeNull();
   });
 
-  it("checks the password and the session cookie", async () => {
+  it("uses APP_PASSWORD as the one-time setup code", async () => {
     process.env.APP_PASSWORD = "correct horse";
-    expect(await checkPassword("correct horse")).toBe(true);
-    expect(await checkPassword("wrong")).toBe(false);
-    const token = await sessionToken();
-    expect(await isValidSession(token)).toBe(true);
-    expect(await isValidSession("forged")).toBe(false);
-    expect(await isValidSession(undefined)).toBe(false);
-    process.env.AUTH_SECRET = "rotated";
-    expect(await isValidSession(token)).toBe(false);
+    expect(await checkSetupCode("correct horse")).toBe(true);
+    expect(await checkSetupCode("wrong")).toBe(false);
+    delete process.env.APP_PASSWORD;
+    expect(await checkSetupCode("")).toBe(true); // local development
   });
 
   it("requires the exact cron bearer secret", () => {

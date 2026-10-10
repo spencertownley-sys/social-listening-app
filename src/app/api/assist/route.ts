@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { draftProfile } from "@/lib/assist";
-import { errorResponse, jsonBody } from "@/lib/http";
+import { apiContext, errorResponse, jsonBody } from "@/lib/http";
 
 export async function POST(req: Request) {
+  const ctx = await apiContext("write");
+  if (ctx instanceof NextResponse) return ctx;
   try {
     const body = await jsonBody(req);
     const description = typeof body.description === "string" ? body.description : "";
