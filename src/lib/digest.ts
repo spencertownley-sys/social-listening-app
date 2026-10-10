@@ -102,22 +102,36 @@ export async function sendDigestEmail(digest: Digest): Promise<{ sent: boolean; 
   return sendEmail(digest.subject, digest.html, digest.text);
 }
 
-export async function sendEmail(subject: string, html: string, text: string): Promise<{ sent: boolean; reason?: string }> {
+export interface EmailAttachment {
+  filename: string;
+  /** Base64-encoded file contents. */
+  content: string;
+}
+
+export async function sendEmail(
+  subject: string,
+  html: string,
+  text: string,
+  opts: { to?: string[]; attachments?: EmailAttachment[] } = {},
+): Promise<{ sent: boolean; reason?: string }> {
   const key = process.env.RESEND_API_KEY;
-  const to = process.env.DIGEST_TO;
-  if (!key || !to) return { sent: false, reason: "Set RESEND_API_KEY and DIGEST_TO to email digests." };
+  const to = opts.to?.length ? opts.to : (process.env.DIGEST_TO ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (!key) return { sent: false, reason: "Set RESEND_API_KEY to send email." };
+  if (to.length === 0) return { sent: false, reason: "Set DIGEST_TO to say who gets these emails." };
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
     body: JSON.stringify({
-      from: process.env.DIGEST_FROM ?? "Earshot <digest@resend.dev>",
-      to: to.split(",").map((s) => s.trim()),
+      // Without a verified domain, Resend only sends from onboarding@resend.dev (to your own address).
+      from: process.env.DIGEST_FROM ?? "Earshot <onboarding@resend.dev>",
+      to,
       subject,
       html,
       text,
+      ...(opts.attachments?.length ? { attachments: opts.attachments } : {}),
     }),
-    signal: AbortSignal.timeout(15_000),
+    signal: AbortSignal.timeout(60_000),
   });
-  if (!res.ok) return { sent: false, reason: `Resend returned ${res.status}` };
+  if (!res.ok) return { sent: false, reason: `Resend returned ${res.status}: ${(await res.text()).slice(0, 200)}` };
   return { sent: true };
 }

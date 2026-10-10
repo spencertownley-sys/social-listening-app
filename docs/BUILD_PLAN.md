@@ -77,6 +77,7 @@ what is stubbed, and the calls made where the PRD left a choice open.
 - [x] Railway Postgres storage with incremental writes; the JSON file is imported on first start
 - [x] Email + password accounts, invite links, owner / editor / viewer roles
 - [x] Account page: members, invites, password change, sign out everywhere, JSON export
+- [x] Nightly backups saved on the server and emailed (Railway Hobby has no database backups)
 
 ## Next steps, in order
 

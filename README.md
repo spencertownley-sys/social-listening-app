@@ -69,6 +69,13 @@ Without `DATABASE_URL`, data is stored in `.data/earshot.json` (git-ignored), or
 `EARSHOT_DATA_FILE`. The first time the server starts against an empty database it imports that
 file, so moving from the file to Postgres needs no manual step.
 
+**Backups.** Railway's Hobby plan can't create database backups, so Earshot makes its own: every
+night (08:00 UTC) it saves the whole dataset as a `.json.gz` file in `/data/backups` (the last 7
+are kept) and, when `RESEND_API_KEY` is set, emails it to the site's owners (or `BACKUP_TO`).
+Owners can also download backups or make one from **Account**. To restore, start Earshot against
+an empty database with `EARSHOT_DATA_FILE` pointing at the backup file: it is imported on first
+start.
+
 ## Configuration
 
 See [.env.example](.env.example). Nothing is required; without `ANTHROPIC_API_KEY` the app uses

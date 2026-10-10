@@ -1,5 +1,6 @@
 import { canWrite, openInvites } from "@/lib/accounts";
 import { pageContext } from "@/lib/http";
+import { backupStatus, canManageBackups, listBackups } from "@/lib/backup";
 import { read, storageBackendName } from "@/lib/store";
 import { AccountPanel } from "@/components/AccountPanel";
 
@@ -24,6 +25,11 @@ export default async function AccountPage() {
       invites={invites}
       canInvite={canWrite(ctx)}
       storage={await storageBackendName()}
+      backups={
+        canManageBackups(ctx)
+          ? { files: await listBackups(), status: backupStatus(), emailReady: Boolean(process.env.RESEND_API_KEY), to: process.env.BACKUP_TO || ctx.user.email }
+          : null
+      }
     />
   );
 }
