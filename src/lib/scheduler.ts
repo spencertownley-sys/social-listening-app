@@ -1,9 +1,11 @@
+import { maybeBackup } from "./backup";
 import { runIngest } from "./pipeline";
 
 /**
  * In-process schedule for a long-running server (Railway): listen for every active profile every
  * INGEST_INTERVAL_MINUTES (default 60), then send whatever alerts and digests are due.
  * `/api/cron` runs the same cycle on demand for hosts that prefer an external scheduler.
+ * It also checks every 10 minutes whether the nightly backup is due (backup.ts).
  */
 
 const g = globalThis as typeof globalThis & { __earshotScheduler?: NodeJS.Timeout; __earshotCycle?: Promise<unknown> };
@@ -30,5 +32,8 @@ export function startScheduler(): void {
   g.__earshotScheduler.unref?.();
   // First cycle shortly after boot, once the server is serving.
   setTimeout(() => void runCycle(), 30_000).unref?.();
+  const backups = setInterval(() => void maybeBackup(), 10 * 60_000);
+  backups.unref?.();
+  setTimeout(() => void maybeBackup(), 60_000).unref?.();
   console.log(`[scheduler] listening every ${minutes} minutes`);
 }

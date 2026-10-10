@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import type { BackupFile, BackupStatus } from "@/lib/backup";
 import type { Role } from "@/lib/store";
 
 interface Props {
@@ -11,6 +12,12 @@ interface Props {
   invites: { id: string; role: Role; expiresAt: string }[];
   canInvite: boolean;
   storage: "file" | "postgres";
+  /** Only for owners of the site's main workspace. */
+  backups: { files: BackupFile[]; status: BackupStatus; emailReady: boolean; to: string } | null;
+}
+
+function size(n: number): string {
+  return n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
 const ROLE_HELP: Record<Role, string> = {
@@ -25,7 +32,7 @@ async function post(url: string, method: string, body: object) {
   return res.status === 204 ? {} : res.json();
 }
 
-export function AccountPanel({ me, workspaceName, members, invites, canInvite, storage }: Props) {
+export function AccountPanel({ me, workspaceName, members, invites, canInvite, storage, backups }: Props) {
   const router = useRouter();
   const [msg, setMsg] = useState<string | null>(null);
   const [link, setLink] = useState<string | null>(null);
@@ -166,11 +173,38 @@ export function AccountPanel({ me, workspaceName, members, invites, canInvite, s
         <section className="card space-y-2 text-sm">
           <h2 className="font-semibold">Your data</h2>
           <p className="text-muted">
-            Stored in {storage === "postgres" ? "Postgres on Railway (back it up from Railway's Backups tab)" : "a local file on the server"}.
+            Stored in {storage === "postgres" ? "Postgres on Railway" : "a local file on the server"}.
           </p>
           <a className="btn" href="/api/export">
             Download a JSON export of this workspace
           </a>
+          {backups && (
+            <div className="space-y-2 pt-2">
+              <h3 className="font-semibold">Nightly backups</h3>
+              <p className="text-muted">
+                A full backup is saved on the server every night (the last 7 are kept)
+                {backups.emailReady ? ` and emailed to ${backups.to}.` : ". Add RESEND_API_KEY in Railway to also get each one by email."}
+              </p>
+              {backups.status.lastError && <p className="text-danger" role="alert">Last backup failed: {backups.status.lastError}</p>}
+              {backups.status.lastResult && !backups.status.lastResult.emailed && backups.emailReady && (
+                <p className="text-danger" role="alert">Last backup wasn&apos;t emailed: {backups.status.lastResult.emailNote}</p>
+              )}
+              <ul className="space-y-1">
+                {backups.files.map((f) => (
+                  <li key={f.name}>
+                    <a className="underline" href={`/api/backups/${f.name}`}>
+                      {f.createdAt.slice(0, 16).replace("T", " ")} UTC
+                    </a>{" "}
+                    <span className="text-muted">({size(f.size)})</span>
+                  </li>
+                ))}
+                {backups.files.length === 0 && <li className="text-muted">No backups yet.</li>}
+              </ul>
+              <button className="btn" onClick={() => run(() => post("/api/backups", "POST", {}), "Backup made.")}>
+                Back up now
+              </button>
+            </div>
+          )}
         </section>
       )}
     </div>

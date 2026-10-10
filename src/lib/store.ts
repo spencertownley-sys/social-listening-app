@@ -1,5 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
+import { gunzipSync } from "zlib";
 import { emptyLearning, type LearningState } from "./learning";
 import type { ListeningProfile, ProfileVersion } from "./profile";
 import type { Enrichment, Feedback, Match, Post } from "./types";
@@ -158,7 +159,10 @@ export const DATA_FILE = process.env.EARSHOT_DATA_FILE ?? path.join(process.cwd(
 
 export async function readDataFile(): Promise<StoreData | null> {
   try {
-    return normalize(JSON.parse(await fs.readFile(/*turbopackIgnore: true*/ DATA_FILE, "utf8")));
+    const raw = await fs.readFile(/*turbopackIgnore: true*/ DATA_FILE);
+    // A backup file (.json.gz) can be imported directly.
+    const json = DATA_FILE.endsWith(".gz") ? gunzipSync(raw).toString("utf8") : raw.toString("utf8");
+    return normalize(JSON.parse(json));
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw e;
