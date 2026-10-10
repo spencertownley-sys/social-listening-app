@@ -2,19 +2,29 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import type { FeedItem } from "@/lib/analytics";
+import { balanceByNetwork, type FeedItem } from "@/lib/analytics";
 import { NETWORK_LABELS, SENTIMENTS, type FeedbackAction, type Network, type Sentiment } from "@/lib/types";
 import { IntentChips, NetworkBadge, SentimentChip, timeAgo } from "./ui";
 
-type Sort = "relevance" | "newest" | "reach";
+type Sort = "balanced" | "relevance" | "newest" | "reach";
 
 /** `now` comes from the server render so the date filter is stable across re-renders. */
-export function Feed({ profileId, items, now }: { profileId: string; items: FeedItem[]; now: number }) {
+export function Feed({
+  profileId,
+  items,
+  now,
+  weights,
+}: {
+  profileId: string;
+  items: FeedItem[];
+  now: number;
+  weights: Partial<Record<Network, number>>;
+}) {
   const router = useRouter();
   const [network, setNetwork] = useState<Network | "all">("all");
   const [sentiment, setSentiment] = useState<Sentiment | "all">("all");
   const [days, setDays] = useState(30);
-  const [sort, setSort] = useState<Sort>("relevance");
+  const [sort, setSort] = useState<Sort>("balanced");
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [fixing, setFixing] = useState<string | null>(null);
@@ -23,9 +33,11 @@ export function Feed({ profileId, items, now }: { profileId: string; items: Feed
   const shown = useMemo(() => {
     const since = now - days * 86_400_000;
     const reach = (i: FeedItem) => i.post.author.followerCount ?? i.post.engagement.views ?? 0;
-    return items
+    const filtered = items
       .filter((i) => (network === "all" || i.post.network === network) && (sentiment === "all" || i.sentiment === sentiment))
-      .filter((i) => Date.parse(i.post.postedAt) >= since)
+      .filter((i) => Date.parse(i.post.postedAt) >= since);
+    if (sort === "balanced") return balanceByNetwork(filtered, weights);
+    return filtered
       .sort((a, b) =>
         sort === "newest"
           ? Date.parse(b.post.postedAt) - Date.parse(a.post.postedAt)
@@ -33,7 +45,7 @@ export function Feed({ profileId, items, now }: { profileId: string; items: Feed
             ? reach(b) - reach(a)
             : b.match.relevance - a.match.relevance,
       );
-  }, [items, network, sentiment, days, sort, now]);
+  }, [items, network, sentiment, days, sort, now, weights]);
 
   async function feedback(postId: string, action: FeedbackAction, correctedSentiment?: Sentiment) {
     setBusy(postId + action);
@@ -99,6 +111,7 @@ export function Feed({ profileId, items, now }: { profileId: string; items: Feed
         <label className="space-y-1">
           <span className="block text-xs text-muted">Sort</span>
           <select className="input w-auto" value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
+            <option value="balanced">Balanced across networks</option>
             <option value="relevance">Most relevant</option>
             <option value="newest">Newest</option>
             <option value="reach">Biggest reach</option>

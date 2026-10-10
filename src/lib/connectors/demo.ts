@@ -30,6 +30,10 @@ const ROWS: Row[] = [
   ["bluesky", "harborhopper.bsky.social", 990, 110, "Wish Royal Caribbean's app would let you book shows before boarding. Please add this! Waiting in line on day one is annoying."],
   ["bluesky", "seadaysandy.bsky.social", 1840, 130, "Wifi so slow on our Carnival ship that I gave up and read a book. Honestly kind of relaxing? #cruise"],
 
+  ["reddit", "u/anchors_aweigh", 0, 6, "PSA for anyone on Carnival next month: the drink package is NOT worth it unless you have 6+ a day. Did the math on our last sailing.", { title: "Carnival Cheers package math", engagement: { likes: 412, replies: 133 } }],
+  ["reddit", "u/balcony_or_bust", 0, 19, "Royal Caribbean or Princess for an Alaska cruise with grandparents? Mobility is a concern. Any recommendations?", { title: "Alaska with grandparents: RCL vs Princess?", engagement: { likes: 88, replies: 64 } }],
+  ["reddit", "u/norwegian_wood", 0, 41, "Starlink on our NCL ship was flawless, but $30/day is still a ripoff. Unacceptable that it isn't included at that fare.", { title: "NCL wifi: fast but overpriced", engagement: { likes: 205, replies: 71 } }],
+
   // Podcast: "The Deep End" (fan love / creator persona)
   ["bluesky", "podnerd.bsky.social", 760, 5, "This week's Deep End episode with the marine biologist was SO good. Learned more about octopus brains than I ever expected. #deependpod"],
   ["youtube", "Clip Corner", 3400, 18, "Best moments from The Deep End podcast episode 112. The squid story had me crying laughing.", { title: "The Deep End Podcast: best of ep. 112" }],
@@ -49,6 +53,7 @@ const ROWS: Row[] = [
 
   // App: "Notably" notes app (product feedback persona)
   ["bluesky", "devdana.bsky.social", 1500, 4, "Notably keeps crashing when I paste images on iPad. Lost a whole page of notes. Really frustrating."],
+  ["reddit", "u/zettelkasten_zoe", 0, 9, "Switched from Notably to Obsidian after the price hike. Sync was nice but I'm done with subscriptions.", { title: "Left Notably — here's why", engagement: { likes: 97, replies: 42 } }],
   ["bluesky", "pkm_paul.bsky.social", 3800, 13, "Feature request for Notably: please add backlinks between notes. It's the one thing keeping me on Obsidian."],
   ["mastodon", "writerwen@mastodon.social", 610, 24, "Notably's new sync is fast and the dark mode is gorgeous. Best notes app I've used. #productivity", { lang: "en" }],
   ["bluesky", "ux_ana.bsky.social", 2900, 37, "Thinking of cancelling my Notably subscription. The price went up and offline mode still doesn't work. Switching to Bear."],

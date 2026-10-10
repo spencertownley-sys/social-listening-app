@@ -32,9 +32,12 @@ npm run build
 - Guided 5-step builder with AI drafting, 7 templates, live preview, and ratings during preview
 - Full Listening Profile config (all 13 PRD layers), versioned on every save, with rollback
 - Boolean query language: `AND OR NOT -word "phrase" NEAR/n ( ) #tag @handle domain: word*`
-- Connectors: **News & RSS** (Google News search + your feeds), **Mastodon** hashtags,
-  **YouTube** (with `YOUTUBE_API_KEY`), **Bluesky** (with an app password; the public
-  search endpoint now refuses anonymous calls), plus an offline demo set
+- Connectors: **Reddit**, **X**, **Threads**, **Instagram** hashtags, **YouTube**, **Bluesky**,
+  **Mastodon** and **News & RSS**, plus an offline demo set. Most need a key from your own
+  account on that network: see [docs/API_ACCESS.md](docs/API_ACCESS.md) and the in-app
+  **Connections** page
+- News is weighted low by default, syndicated copies of a story collapse into one, and the feed
+  balances networks so articles don't drown out conversation
 - Pre-filter → Claude (or offline) sentiment / emotion / intent labels → per-profile matching
 - Feed with filters, "why this matched", confidence, and five feedback actions that change ranking
 - Dashboard: volume by sentiment, sentiment split, networks, top authors, intents
@@ -45,8 +48,8 @@ npm run build
 
 ## Hosting (Railway)
 
-The live site runs as one Railway service built from this folder (root directory
-`social-listening-app`), with a persistent volume mounted at `/data` and
+Live at https://earshot-listening.up.railway.app. It runs as one Railway service (project
+`earshot`) that deploys this repo's `main` branch, with a persistent volume mounted at `/data` and
 `EARSHOT_DATA_FILE=/data/earshot.json`. Set `APP_PASSWORD` (and optionally `AUTH_SECRET`) to
 protect it, and add any of the optional keys below in the service's Variables tab. The server
 listens on a schedule (`INGEST_INTERVAL_MINUTES`, default 60); `POST /api/cron` with

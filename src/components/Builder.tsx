@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import type { ProfileDraft } from "@/lib/assist";
-import { LIVE_NETWORKS, TEMPLATES, type ProfileConfig, type ProfileConfigInput } from "@/lib/profile";
+import { DEFAULT_WEIGHTS, LIVE_NETWORKS, TEMPLATES, type ProfileConfig, type ProfileConfigInput } from "@/lib/profile";
 import { validateQuery } from "@/lib/query";
 import {
   EMOTIONS,
@@ -74,7 +74,7 @@ function fromConfig(c?: ProfileConfig | ProfileConfigInput): FormState {
     query: c?.match.query ?? "",
     semantic: c?.match.semantic ?? "",
     excludePresets: c?.match.exclude_presets ?? ["giveaways", "jobs"],
-    sources: c?.sources ?? Object.fromEntries(LIVE_NETWORKS.map((n) => [n, 100])),
+    sources: c?.sources ?? { ...DEFAULT_WEIGHTS },
     sentiment: c?.sentiment?.keep ?? [...SENTIMENTS],
     minConfidence: c?.sentiment?.min_confidence ?? 0,
     intents: c?.intents ?? [],
@@ -387,11 +387,12 @@ export function Builder({ profileId, initial }: { profileId?: string; initial?: 
                 <label className="flex items-center justify-between gap-2">
                   <span className="font-medium">
                     {NETWORK_LABELS[n]} {!live && <span className="text-xs font-normal text-muted">(coming soon)</span>}
+                    {n === "news" && <span className="block text-xs font-normal text-muted">Articles rather than conversation; kept low by default</span>}
                   </span>
                   <input
                     type="checkbox"
                     checked={w > 0}
-                    onChange={(e) => set("sources", { ...f.sources, [n]: e.target.checked ? 100 : 0 })}
+                    onChange={(e) => set("sources", { ...f.sources, [n]: e.target.checked ? (DEFAULT_WEIGHTS[n] ?? 100) : 0 })}
                   />
                 </label>
                 <label className="flex items-center gap-3 text-xs text-muted">

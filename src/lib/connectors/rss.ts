@@ -80,6 +80,9 @@ export function itemToPost(item: FeedItem, feedUrl: string): Post | null {
   };
 }
 
+/** Google News returns up to ~100 items per search; keep the newest few so news can't swamp a run. */
+const NEWS_MAX_PER_FEED = Number(process.env.NEWS_MAX_PER_FEED ?? 20);
+
 async function readFeed(url: string): Promise<Post[]> {
   const res = await fetch(url, {
     headers: { "user-agent": "Earshot/0.1 (social listening; public data only)" },
@@ -88,7 +91,9 @@ async function readFeed(url: string): Promise<Post[]> {
   if (!res.ok) throw new Error(`${res.status} from ${feedHost(url)}`);
   return parseFeed(await res.text())
     .map((i) => itemToPost(i, url))
-    .filter((p): p is Post => p !== null);
+    .filter((p): p is Post => p !== null)
+    .sort((a, b) => Date.parse(b.postedAt) - Date.parse(a.postedAt))
+    .slice(0, NEWS_MAX_PER_FEED);
 }
 
 export const rssConnector: Connector = {

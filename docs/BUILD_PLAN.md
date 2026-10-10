@@ -7,7 +7,7 @@ what is stubbed, and the calls made where the PRD left a choice open.
 
 | Question | Decision for now | Why / how to change |
 |---|---|---|
-| Where does the code live? | `social-listening-app/` in CruiseNewsYouCanUse | The dedicated repo `spencertownley-sys/social-listening-app` is empty and this session can only push here. Move with `git subtree split --prefix social-listening-app` and push to the new repo when ready. |
+| Where does the code live? | `spencertownley-sys/social-listening-app` (moved from CruiseNewsYouCanUse with full history) | Railway deploys this repo's `main`. |
 | Launch persona (open question 1) | Not decided. Built **connector-agnostic** with creators' networks first (Bluesky, YouTube, RSS, Mastodon) | These are the PRD's cheap, legal Phase 1 networks either way. Small-business networks (Facebook/X) slot in as connectors later. |
 | Storage | A JSON-file store behind a `Store` interface for local dev; Supabase schema with RLS written in `supabase/migrations/` | Lets the app run with zero setup. The Supabase adapter is the next backend task. |
 | Auth | One shared workspace behind a password gate (`APP_PASSWORD`) on the hosted site | Multi-user sign-in (email + Google) arrives with Supabase Auth. |
@@ -59,6 +59,12 @@ what is stubbed, and the calls made where the PRD left a choice open.
 - [x] Supabase SQL migration for the full data model with row-level security
 - [ ] Supabase store adapter + Auth
 - [ ] Stripe billing and plan limits (Phase 2)
+
+## Done in the second pass
+- [x] Reddit connector (search + subreddit comments), app-only OAuth
+- [x] X, Threads and Instagram connectors (keys from the owner's accounts; X spend capped per day)
+- [x] News weighted low by default, syndicated stories collapsed, per-search cap, balanced feed
+- [x] Connections page + docs/API_ACCESS.md
 
 ## Next steps, in order
 
