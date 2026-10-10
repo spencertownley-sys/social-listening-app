@@ -42,7 +42,9 @@ npm run build
 - Feed with filters, "why this matched", confidence, and five feedback actions that change ranking
 - Dashboard: volume by sentiment, sentiment split, networks, top authors, intents
 - Digest preview and email via Resend
-- Scheduled listening (hourly by default) with real-time, spike and digest alerts, quiet hours
+- Bluesky in real time through its free firehose (no key needed)
+- Scheduled listening (hourly by default) with real-time, spike (negative-only by default) and
+  digest alerts, AI-written digest summaries when Claude is configured, quiet hours
   and daily caps; in-app notifications plus email, Slack, Discord and webhook delivery
 - Password-protected hosting (set `APP_PASSWORD`)
 

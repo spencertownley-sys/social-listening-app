@@ -53,6 +53,7 @@ interface FormState {
   language: string;
   mode: ProfileConfig["delivery"]["mode"];
   cadence: ProfileConfig["delivery"]["cadence"];
+  spikeOn: ProfileConfig["delivery"]["spike_on"];
   channels: Channel[];
   quietStart: string;
   quietEnd: string;
@@ -86,6 +87,7 @@ function fromConfig(c?: ProfileConfig | ProfileConfigInput): FormState {
     language: (c?.language ?? []).join(", "),
     mode: c?.delivery?.mode ?? "digest",
     cadence: c?.delivery?.cadence ?? "daily",
+    spikeOn: c?.delivery?.spike_on ?? "negative",
     channels: c?.delivery?.channels ?? ["in_app", "email"],
     quietStart: c?.quiet_hours?.start ?? "",
     quietEnd: c?.quiet_hours?.end ?? "",
@@ -129,6 +131,7 @@ function toConfig(f: FormState, base?: ProfileConfig): ProfileConfigInput {
       cadence: f.cadence,
       channels: f.channels,
       spike_multiplier: base?.delivery.spike_multiplier ?? 3,
+      spike_on: f.spikeOn,
     },
     quiet_hours:
       f.quietStart && f.quietEnd
@@ -531,13 +534,19 @@ export function Builder({ profileId, initial }: { profileId?: string; initial?: 
               [
                 ["digest", "Digest on a schedule"],
                 ["realtime", "As it happens"],
-                ["spike", "Only when volume spikes"],
+                ["spike", "Only when volume spikes (3× the usual hourly rate)"],
               ] as const
             ).map(([m, label]) => (
               <label key={m} className="flex items-center gap-2 text-sm">
                 <input type="radio" name="mode" checked={f.mode === m} onChange={() => set("mode", m)} /> {label}
               </label>
             ))}
+            {f.mode === "spike" && (
+              <select className="input w-auto" value={f.spikeOn} onChange={(e) => set("spikeOn", e.target.value as FormState["spikeOn"])} aria-label="What counts toward a spike">
+                <option value="negative">Count negative posts only</option>
+                <option value="all">Count every mention</option>
+              </select>
+            )}
             {f.mode === "digest" && (
               <select className="input w-auto" value={f.cadence} onChange={(e) => set("cadence", e.target.value as FormState["cadence"])} aria-label="Digest cadence">
                 <option value="hourly">Hourly</option>

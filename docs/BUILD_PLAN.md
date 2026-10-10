@@ -66,9 +66,15 @@ what is stubbed, and the calls made where the PRD left a choice open.
 - [x] News weighted low by default, syndicated stories collapsed, per-search cap, balanced feed
 - [x] Connections page + docs/API_ACCESS.md
 
+## Done in the third pass
+- [x] Bluesky real time via Jetstream (free firehose, no key), feeding the normal pipeline every 2 minutes
+- [x] Spike alerts count negative posts by default (crisis radar), or every mention
+- [x] AI-written digest summaries (Claude) at the top of sent digests
+- [x] CI on GitHub Actions: typecheck, lint, tests, build
+- [x] Remove-demo-data button
+
 ## Next steps, in order
 
 1. Supabase adapter for `Store`, plus email/Google sign-in (multi-user).
-2. Bluesky Jetstream worker for real-time ingest.
 3. Embedding-based semantic topics (pgvector).
 4. Phase 2 connectors: Reddit, Threads; push/SMS alerts; Stripe billing.

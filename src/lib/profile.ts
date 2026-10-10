@@ -75,8 +75,10 @@ export const ProfileConfigSchema = z.object({
         .array(z.enum(["in_app", "email", "push", "sms", "slack", "discord", "webhook"]))
         .default(["in_app", "email"]),
       spike_multiplier: z.number().min(1).default(3),
+      /** What a spike counts: negative posts only (crisis radar) or every mention. */
+      spike_on: z.enum(["negative", "all"]).default("negative"),
     })
-    .default({ mode: "digest", cadence: "daily", channels: ["in_app", "email"], spike_multiplier: 3 }),
+    .default({ mode: "digest", cadence: "daily", channels: ["in_app", "email"], spike_multiplier: 3, spike_on: "negative" }),
   /** Layer 12. */
   quiet_hours: z
     .object({ start: z.string().regex(/^\d{2}:\d{2}$/), end: z.string().regex(/^\d{2}:\d{2}$/), tz: z.string() })

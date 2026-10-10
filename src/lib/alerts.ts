@@ -1,5 +1,6 @@
 import { feedFor, type FeedItem } from "./analytics";
-import { buildDigest, sendEmail } from "./digest";
+import { buildDigest, digestPeriodLabel, digestWindowItems, sendEmail } from "./digest";
+import { summarizeItems } from "./summary";
 import type { ListeningProfile } from "./profile";
 import { newId, type AppNotification, type StoreData } from "./store";
 import { NETWORK_LABELS } from "./types";
@@ -8,7 +9,8 @@ import { NETWORK_LABELS } from "./types";
  * PRD layers 11 + 12: turn new matches into alerts. Runs after every ingest (scheduler or
  * /api/cron). Per profile, by delivery mode:
  *  - realtime: one bundled alert for the matches created since the last one
- *  - spike:    an alert when the last hour's matches reach `spike_multiplier` × the hourly
+ *  - spike:    an alert when the last hour's matches (negative ones only, unless `spike_on`
+ *              is "all") reach `spike_multiplier` × the hourly
  *              average of the previous 7 days (and at least MIN_SPIKE posts)
  *  - digest:   the digest for the cadence window, once per hour/day/week
  * Quiet hours defer alerts (nothing is lost; they go out on the first run after), and
@@ -125,14 +127,16 @@ export async function runAlerts(data: StoreData, now = new Date()): Promise<AppN
       state.lastRealtimeAt = now.toISOString();
     } else if (c.delivery.mode === "spike") {
       const cooled = !state.lastSpikeAt || nowMs - Date.parse(state.lastSpikeAt) > SPIKE_COOLDOWN_MS;
-      const spike = cooled ? detectSpike(feed, c.delivery.spike_multiplier, nowMs) : null;
+      const negativeOnly = c.delivery.spike_on !== "all";
+      const watched = negativeOnly ? feed.filter((it) => it.sentiment === "negative") : feed;
+      const spike = cooled ? detectSpike(watched, c.delivery.spike_multiplier, nowMs) : null;
       if (spike) {
-        const hourItems = feed.filter((it) => Date.parse(it.post.postedAt) > nowMs - 3_600_000);
+        const hourItems = watched.filter((it) => Date.parse(it.post.postedAt) > nowMs - 3_600_000);
         pending = {
           n: {
             profileId: profile.id,
             kind: "spike",
-            title: `Spike: ${spike.current} mentions in the last hour (usual ≈ ${spike.baseline.toFixed(1)}/hour)`,
+            title: `${negativeOnly ? "Negative spike" : "Spike"}: ${spike.current} ${negativeOnly ? "negative " : ""}mentions in the last hour (usual ≈ ${spike.baseline.toFixed(1)}/hour)`,
             body: summarize(hourItems),
             postIds: hourItems.map((it) => it.post.id),
             createdAt: now.toISOString(),
@@ -143,7 +147,9 @@ export async function runAlerts(data: StoreData, now = new Date()): Promise<AppN
     } else {
       const last = Date.parse(state.lastDigestAt ?? profile.createdAt);
       if (nowMs - last >= CADENCE_MS[c.delivery.cadence]) {
-        const digest = buildDigest(profile, feed, now);
+        const windowItems = digestWindowItems(profile, feed, now);
+        const aiSummary = await summarizeItems(profile.config.name, digestPeriodLabel(c.delivery.cadence), windowItems);
+        const digest = buildDigest(profile, feed, now, aiSummary ?? undefined);
         state.lastDigestAt = now.toISOString();
         if (digest.items.length) {
           pending = {
@@ -151,7 +157,7 @@ export async function runAlerts(data: StoreData, now = new Date()): Promise<AppN
               profileId: profile.id,
               kind: "digest",
               title: digest.summaryLine,
-              body: summarize(digest.items, 10),
+              body: (digest.aiSummary ? digest.aiSummary + "\n\n" : "") + summarize(digest.items, 10),
               postIds: digest.items.map((it) => it.post.id),
               createdAt: now.toISOString(),
             },

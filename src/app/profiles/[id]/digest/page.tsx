@@ -18,6 +18,7 @@ export default async function DigestPage({ params }: { params: Promise<{ id: str
           <p className="font-medium">{digest.subject}</p>
           <p className="text-sm text-muted">
             {profile.config.delivery.cadence} digest · {digest.items.length} posts in this window · channels: {profile.config.delivery.channels.join(", ")}
+            {" · "}sent digests open with an AI summary when Claude is configured
           </p>
         </div>
         <SendDigestButton profileId={profile.id} />
