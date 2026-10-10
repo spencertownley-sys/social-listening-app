@@ -8,11 +8,11 @@ export const dynamic = "force-dynamic";
 
 export default async function DigestPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { data, profile, versions } = await loadProfile(id);
+  const { data, profile, versions, canEdit } = await loadProfile(id);
   const digest = buildDigest(profile, feedFor(data, id));
   return (
     <>
-      <ProfileHeader profile={profile} versions={versions} current="digest" />
+      <ProfileHeader profile={profile} versions={versions} current="digest" canEdit={canEdit} />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="font-medium">{digest.subject}</p>
@@ -21,7 +21,7 @@ export default async function DigestPage({ params }: { params: Promise<{ id: str
             {" · "}sent digests open with an AI summary when Claude is configured
           </p>
         </div>
-        <SendDigestButton profileId={profile.id} />
+        {canEdit && <SendDigestButton profileId={profile.id} />}
       </div>
       <iframe title="Digest email preview" srcDoc={digest.html} className="h-[70vh] w-full rounded-lg border border-line bg-white" sandbox="" />
     </>

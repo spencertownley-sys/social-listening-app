@@ -46,19 +46,28 @@ npm run build
 - Scheduled listening (hourly by default) with real-time, spike (negative-only by default) and
   digest alerts, AI-written digest summaries when Claude is configured, quiet hours
   and daily caps; in-app notifications plus email, Slack, Discord and webhook delivery
-- Password-protected hosting (set `APP_PASSWORD`)
+- Accounts: email + password sign-in, invite links, and owner / editor / viewer roles;
+  owners can export their workspace as JSON
 
 ## Hosting (Railway)
 
 Live at https://earshot-listening.up.railway.app. It runs as one Railway service (project
-`earshot`) that deploys this repo's `main` branch, with a persistent volume mounted at `/data` and
-`EARSHOT_DATA_FILE=/data/earshot.json`. Set `APP_PASSWORD` (and optionally `AUTH_SECRET`) to
-protect it, and add any of the optional keys below in the service's Variables tab. The server
-listens on a schedule (`INGEST_INTERVAL_MINUTES`, default 60); `POST /api/cron` with
-`Authorization: Bearer $CRON_SECRET` runs a cycle on demand.
+`earshot`) that deploys this repo's `main` branch, with data in a Railway Postgres database
+(`DATABASE_URL`). Turn on backups in the Postgres service's **Backups** tab. Add any of the
+optional keys below in the service's Variables tab. The server listens on a schedule
+(`INGEST_INTERVAL_MINUTES`, default 60); `POST /api/cron` with `Authorization: Bearer
+$CRON_SECRET` runs a cycle on demand.
 
-Data is stored in `.data/earshot.json` (git-ignored). The Supabase schema for production,
-with row-level security, is in `supabase/migrations/0001_init.sql`.
+**Accounts.** Everything except `/login`, `/setup` and `/signup` needs a signed-in user. On a
+new site, open `/setup` to create the first account; on the hosted site this asks for a setup
+code, which is the value of `APP_PASSWORD`. The first account owns the existing workspace and
+its data. Invite others from **Account**: each invite link works once, for 7 days, and gives
+the role you picked (viewers can read but not change anything). Sessions are signed with
+`AUTH_SECRET`; changing it signs everyone out.
+
+Without `DATABASE_URL`, data is stored in `.data/earshot.json` (git-ignored), or in
+`EARSHOT_DATA_FILE`. The first time the server starts against an empty database it imports that
+file, so moving from the file to Postgres needs no manual step.
 
 ## Configuration
 

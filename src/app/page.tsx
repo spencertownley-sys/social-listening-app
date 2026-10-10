@@ -2,6 +2,8 @@ import Link from "next/link";
 import { dashboardFor, feedFor } from "@/lib/analytics";
 import { claudeEnabled } from "@/lib/enrich/claude";
 import { activeSources, LIVE_NETWORKS } from "@/lib/profile";
+import { canWrite, visibleProfiles } from "@/lib/accounts";
+import { pageContext } from "@/lib/http";
 import { read } from "@/lib/store";
 import { NETWORK_LABELS } from "@/lib/types";
 import { IngestButtons } from "@/components/IngestButtons";
@@ -10,7 +12,9 @@ import { NetScore, timeAgo } from "@/components/ui";
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
+  const ctx = await pageContext();
   const data = await read();
+  const profiles = visibleProfiles(data, ctx);
   const lastRun = data.runs.at(-1);
   const postCount = Object.keys(data.posts).length;
 
@@ -24,10 +28,16 @@ export default async function Home() {
             {lastRun ? ` · last run ${timeAgo(lastRun.finishedAt)}` : ""}
           </p>
         </div>
-        <IngestButtons hasProfiles={data.profiles.length > 0} hasDemo={Object.values(data.posts).some((p) => /^demo\d+$/.test(p.externalId))} />
+        {canWrite(ctx) && (
+          <IngestButtons
+            hasProfiles={profiles.length > 0}
+            hasDemo={Object.values(data.posts).some((p) => /^demo\d+$/.test(p.externalId))}
+            isOwner={ctx.role === "owner"}
+          />
+        )}
       </div>
 
-      {data.profiles.length === 0 ? (
+      {profiles.length === 0 ? (
         <div className="card space-y-3 text-center">
           <h2 className="text-lg font-semibold">Set up your first profile</h2>
           <p className="text-sm text-muted">
@@ -42,7 +52,7 @@ export default async function Home() {
         </div>
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2">
-          {data.profiles.map((p) => {
+          {profiles.map((p) => {
             const items = feedFor(data, p.id);
             const d = dashboardFor(items);
             const sources = activeSources(p.config);

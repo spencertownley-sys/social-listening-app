@@ -2,7 +2,17 @@ import Link from "next/link";
 import type { ListeningProfile } from "@/lib/profile";
 import { ProfileActions } from "./ProfileActions";
 
-export function ProfileHeader({ profile, versions, current }: { profile: ListeningProfile; versions: number[]; current: "feed" | "dashboard" | "digest" | "edit" }) {
+export function ProfileHeader({
+  profile,
+  versions,
+  current,
+  canEdit = true,
+}: {
+  profile: ListeningProfile;
+  versions: number[];
+  current: "feed" | "dashboard" | "digest" | "edit";
+  canEdit?: boolean;
+}) {
   const tabs = [
     ["feed", "Feed", `/profiles/${profile.id}`],
     ["dashboard", "Dashboard", `/profiles/${profile.id}/dashboard`],
@@ -18,7 +28,7 @@ export function ProfileHeader({ profile, versions, current }: { profile: Listeni
             {profile.config.description ? ` · ${profile.config.description}` : ""}
           </p>
         </div>
-        <ProfileActions profile={profile} versions={versions} />
+        {canEdit ? <ProfileActions profile={profile} versions={versions} /> : <span className="chip text-muted">View only</span>}
       </div>
       <nav className="flex gap-4 border-b border-line text-sm">
         {tabs.map(([id, label, href]) => (

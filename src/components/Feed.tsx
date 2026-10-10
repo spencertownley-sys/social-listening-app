@@ -14,11 +14,13 @@ export function Feed({
   items,
   now,
   weights,
+  readOnly = false,
 }: {
   profileId: string;
   items: FeedItem[];
   now: number;
   weights: Partial<Record<Network, number>>;
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const [network, setNetwork] = useState<Network | "all">("all");
@@ -164,6 +166,8 @@ export function Feed({
                 <span className="font-medium">Why this matched:</span> {match.reasons.map((r) => r.detail).join(" · ")}
               </p>
               <div className="flex flex-wrap gap-2">
+                {!readOnly && (
+                  <>
                 <button className="btn" disabled={!!busy} onClick={() => feedback(post.id, "relevant")}>
                   👍 Relevant
                 </button>
@@ -179,6 +183,8 @@ export function Feed({
                 <button className="btn" disabled={!!busy} onClick={() => feedback(post.id, "mute_author")}>
                   Mute author
                 </button>
+                  </>
+                )}
                 <a className="btn" href={post.url} target="_blank" rel="noreferrer">
                   Open original
                 </a>

@@ -9,8 +9,8 @@ what is stubbed, and the calls made where the PRD left a choice open.
 |---|---|---|
 | Where does the code live? | `spencertownley-sys/social-listening-app` (moved from CruiseNewsYouCanUse with full history) | Railway deploys this repo's `main`. |
 | Launch persona (open question 1) | Not decided. Built **connector-agnostic** with creators' networks first (Bluesky, YouTube, RSS, Mastodon) | These are the PRD's cheap, legal Phase 1 networks either way. Small-business networks (Facebook/X) slot in as connectors later. |
-| Storage | A JSON-file store behind a `Store` interface for local dev; Supabase schema with RLS written in `supabase/migrations/` | Lets the app run with zero setup. The Supabase adapter is the next backend task. |
-| Auth | One shared workspace behind a password gate (`APP_PASSWORD`) on the hosted site | Multi-user sign-in (email + Google) arrives with Supabase Auth. |
+| Storage | Railway Postgres when `DATABASE_URL` is set; a JSON file otherwise | Supabase's free plan was full; Railway Postgres sits next to the app. The JSON file is imported on first start. |
+| Auth | Email + password accounts with invite links and owner/editor/viewer roles; `APP_PASSWORD` is the one-time setup code | Google sign-in and email password reset can follow. |
 | AI models | Enrichment: `claude-haiku-5-5` (PRD: "small fast model at volume"). Profile drafting: `claude-opus-5-5`. Both configurable through env. | If `ANTHROPIC_API_KEY` is unset, both fall back to a local heuristic so the app still works offline. |
 | Semantic topics (layer 4) | Keyword-expansion match for now (topic sentence → key terms); embeddings + pgvector later | Keeps the MVP free of a vector store. |
 | Queue / schedule | In-process scheduler on the Railway server (every `INGEST_INTERVAL_MINUTES`), plus `POST /api/cron` | Swap for a separate worker + Upstash/Redis streams at scale. |
@@ -57,7 +57,7 @@ what is stubbed, and the calls made where the PRD left a choice open.
 **Platform**
 - [x] Password gate for the hosted site, live on Railway
 - [x] Supabase SQL migration for the full data model with row-level security
-- [ ] Supabase store adapter + Auth
+- [x] Postgres storage + accounts (see the fourth pass)
 - [ ] Stripe billing and plan limits (Phase 2)
 
 ## Done in the second pass
@@ -73,8 +73,13 @@ what is stubbed, and the calls made where the PRD left a choice open.
 - [x] CI on GitHub Actions: typecheck, lint, tests, build
 - [x] Remove-demo-data button
 
+## Done in the fourth pass
+- [x] Railway Postgres storage with incremental writes; the JSON file is imported on first start
+- [x] Email + password accounts, invite links, owner / editor / viewer roles
+- [x] Account page: members, invites, password change, sign out everywhere, JSON export
+
 ## Next steps, in order
 
-1. Supabase adapter for `Store`, plus email/Google sign-in (multi-user), and backups.
+1. Google sign-in and password reset by email.
 2. Embedding-based semantic topics (pgvector).
 3. Push/SMS alerts; Stripe billing and plan limits.

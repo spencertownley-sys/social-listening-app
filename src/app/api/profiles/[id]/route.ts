@@ -1,13 +1,24 @@
 import { NextResponse } from "next/server";
-import { errorResponse, jsonBody } from "@/lib/http";
+import { canSeeProfile } from "@/lib/accounts";
+import { apiContext, errorResponse, jsonBody } from "@/lib/http";
 import { refreshProfileMatches } from "@/lib/pipeline";
 import { deleteProfile, updateProfile } from "@/lib/profiles";
 import { read } from "@/lib/store";
 
 type Ctx = { params: Promise<{ id: string }> };
 
+/** The signed-in context if it may see (and, for writes, change) this profile; else the response. */
+async function guard(id: string, need: "read" | "write") {
+  const ctx = await apiContext(need);
+  if (ctx instanceof NextResponse) return ctx;
+  if (!canSeeProfile(await read(), ctx, id)) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  return ctx;
+}
+
 export async function GET(_req: Request, { params }: Ctx) {
   const { id } = await params;
+  const denied = await guard(id, "read");
+  if (denied instanceof NextResponse) return denied;
   const data = await read();
   const profile = data.profiles.find((p) => p.id === id);
   if (!profile) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -18,6 +29,8 @@ export async function GET(_req: Request, { params }: Ctx) {
 export async function PATCH(req: Request, { params }: Ctx) {
   try {
     const { id } = await params;
+    const denied = await guard(id, "write");
+    if (denied instanceof NextResponse) return denied;
     const body = await jsonBody(req);
     const status = body.status === "active" || body.status === "paused" ? body.status : undefined;
     const rollbackTo = typeof body.rollbackTo === "number" ? body.rollbackTo : undefined;
@@ -32,5 +45,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
 
 export async function DELETE(_req: Request, { params }: Ctx) {
   const { id } = await params;
+  const denied = await guard(id, "write");
+  if (denied instanceof NextResponse) return denied;
   return (await deleteProfile(id)) ? new NextResponse(null, { status: 204 }) : NextResponse.json({ error: "Not found" }, { status: 404 });
 }

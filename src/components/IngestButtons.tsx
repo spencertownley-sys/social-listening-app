@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { IngestRun } from "@/lib/store";
 
-export function IngestButtons({ hasProfiles, hasDemo }: { hasProfiles: boolean; hasDemo: boolean }) {
+export function IngestButtons({ hasProfiles, hasDemo, isOwner }: { hasProfiles: boolean; hasDemo: boolean; isOwner: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState<"live" | "demo" | "clear" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -47,7 +47,7 @@ export function IngestButtons({ hasProfiles, hasDemo }: { hasProfiles: boolean; 
   return (
     <div className="flex flex-col items-end gap-2">
       <div className="flex gap-2">
-        {hasDemo ? (
+        {!isOwner ? null : hasDemo ? (
           <button className="btn" onClick={clearDemo} disabled={!!busy}>
             {busy === "clear" ? "Removing…" : "Remove demo posts"}
           </button>

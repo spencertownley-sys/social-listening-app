@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
 import Link from "next/link";
-import { authEnabled, isValidSession, SESSION_COOKIE } from "@/lib/auth";
+import { currentContext, visibleProfiles } from "@/lib/accounts";
 import { read } from "@/lib/store";
 import "./globals.css";
 
@@ -11,8 +10,14 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const signedIn = await isValidSession((await cookies()).get(SESSION_COOKIE)?.value);
-  const unread = signedIn ? (await read()).notifications.filter((n) => !n.read).length : 0;
+  const ctx = await currentContext();
+  const signedIn = !!ctx;
+  let unread = 0;
+  if (ctx) {
+    const data = await read();
+    const mine = new Set(visibleProfiles(data, ctx).map((p) => p.id));
+    unread = data.notifications.filter((n) => !n.read && mine.has(n.profileId)).length;
+  }
   return (
     <html lang="en">
       <body className="antialiased">
@@ -40,13 +45,16 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
                     </span>
                   )}
                 </Link>
-                {authEnabled() && (
-                  <form method="post" action="/api/logout" className="ml-auto">
+                <span className="ml-auto flex items-center gap-4">
+                  <Link href="/account" className="text-sm text-muted hover:text-foreground">
+                    {ctx?.user.name || ctx?.user.email}
+                  </Link>
+                  <form method="post" action="/api/logout">
                     <button className="text-sm text-muted hover:text-foreground" type="submit">
                       Sign out
                     </button>
                   </form>
-                )}
+                </span>
               </>
             )}
           </nav>

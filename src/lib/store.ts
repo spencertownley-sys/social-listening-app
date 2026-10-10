@@ -5,9 +5,12 @@ import type { ListeningProfile, ProfileVersion } from "./profile";
 import type { Enrichment, Feedback, Match, Post } from "./types";
 
 /**
- * Storage interface. The MVP ships a single-workspace JSON-file implementation so the app runs
- * with zero setup; `supabase/migrations/0001_init.sql` is the production schema the Supabase
- * adapter will implement against.
+ * Storage. The whole dataset lives in memory (one server process) and is persisted after every
+ * write by one of two backends:
+ *  - Postgres (when DATABASE_URL is set; the hosted site): posts, labels and matches in their own
+ *    tables, saved incrementally; everything else as small JSON records. See store-pg.ts.
+ *  - A JSON file (local development and tests): EARSHOT_DATA_FILE, default .data/earshot.json.
+ * On first start against an empty database, an existing JSON file is imported automatically.
  */
 
 export interface IngestRun {
@@ -42,8 +45,47 @@ export interface AlertState {
   lastSpikeAt?: string;
 }
 
+export type Role = "owner" | "editor" | "viewer";
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  passwordHash: string;
+  /** Bumped to sign the user out everywhere (sessions carry the version they were issued with). */
+  sessionVersion: number;
+  createdAt: string;
+}
+
+export interface Workspace {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface Membership {
+  workspaceId: string;
+  userId: string;
+  role: Role;
+}
+
+export interface Invite {
+  id: string;
+  tokenHash: string;
+  workspaceId: string;
+  role: Role;
+  createdBy: string;
+  createdAt: string;
+  expiresAt: string;
+  usedBy?: string;
+  usedAt?: string;
+}
+
 export interface StoreData {
-  workspace: { id: string; name: string };
+  workspaces: Workspace[];
+  users: User[];
+  memberships: Membership[];
+  invites: Invite[];
   profiles: ListeningProfile[];
   versions: ProfileVersion[];
   posts: Record<string, Post>;
@@ -58,9 +100,15 @@ export interface StoreData {
 
 export const RETENTION_DAYS = 90;
 
-function emptyData(): StoreData {
+/** The workspace that existed before accounts; the first account takes it over. */
+export const DEFAULT_WORKSPACE_ID = "ws_local";
+
+export function emptyData(): StoreData {
   return {
-    workspace: { id: "ws_local", name: "My workspace" },
+    workspaces: [{ id: DEFAULT_WORKSPACE_ID, name: "My workspace", createdAt: new Date().toISOString() }],
+    users: [],
+    memberships: [],
+    invites: [],
     profiles: [],
     versions: [],
     posts: {},
@@ -74,25 +122,18 @@ function emptyData(): StoreData {
   };
 }
 
-const DATA_FILE = process.env.EARSHOT_DATA_FILE ?? path.join(process.cwd(), ".data", "earshot.json");
-
-// Next.js gives pages and route handlers separate module instances, so the cache and write
-// queue live on globalThis to keep every part of the server process on one copy.
-const g = globalThis as typeof globalThis & { __earshotStore?: { cache: StoreData | null; queue: Promise<unknown> } };
-const state = (g.__earshotStore ??= { cache: null, queue: Promise.resolve() });
-
-async function load(): Promise<StoreData> {
-  if (state.cache) return state.cache;
-  try {
-    state.cache = { ...emptyData(), ...JSON.parse(await fs.readFile(/*turbopackIgnore: true*/ DATA_FILE, "utf8")) } as StoreData;
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-    state.cache = emptyData();
+/** Fill in sections added after a store was first written (older files/rows). */
+export function normalize(raw: Partial<StoreData> & { workspace?: { id: string; name: string } }): StoreData {
+  const base = emptyData();
+  const data = { ...base, ...raw } as StoreData & { workspace?: { id: string; name: string } };
+  if (raw.workspace && !raw.workspaces) {
+    data.workspaces = [{ id: raw.workspace.id, name: raw.workspace.name, createdAt: new Date().toISOString() }];
   }
-  return state.cache;
+  delete data.workspace;
+  return data;
 }
 
-function applyRetention(data: StoreData): void {
+export function applyRetention(data: StoreData): void {
   const cutoff = Date.now() - RETENTION_DAYS * 86_400_000;
   for (const [id, p] of Object.entries(data.posts)) {
     if (Date.parse(p.postedAt) < cutoff) {
@@ -103,14 +144,71 @@ function applyRetention(data: StoreData): void {
   for (const [id, m] of Object.entries(data.matches)) if (!data.posts[m.postId]) delete data.matches[id];
   data.runs = data.runs.slice(-50);
   data.notifications = data.notifications.slice(-500);
+  const now = Date.now();
+  data.invites = data.invites.filter((i) => Date.parse(i.expiresAt) > now - 30 * 86_400_000);
+}
+
+export interface Backend {
+  name: "file" | "postgres";
+  load(): Promise<StoreData>;
+  persist(data: StoreData): Promise<void>;
+}
+
+export const DATA_FILE = process.env.EARSHOT_DATA_FILE ?? path.join(process.cwd(), ".data", "earshot.json");
+
+export async function readDataFile(): Promise<StoreData | null> {
+  try {
+    return normalize(JSON.parse(await fs.readFile(/*turbopackIgnore: true*/ DATA_FILE, "utf8")));
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw e;
+  }
+}
+
+const fileBackend: Backend = {
+  name: "file",
+  async load() {
+    return (await readDataFile()) ?? emptyData();
+  },
+  async persist(data) {
+    await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
+    const tmp = `${DATA_FILE}.${process.pid}.tmp`;
+    await fs.writeFile(tmp, JSON.stringify(data));
+    await fs.rename(tmp, DATA_FILE);
+  },
+};
+
+// Next.js gives pages and route handlers separate module instances, so the cache, backend and
+// write queue live on globalThis to keep every part of the server process on one copy.
+const g = globalThis as typeof globalThis & {
+  __earshotStore?: { cache: StoreData | null; queue: Promise<unknown>; backend: Backend | null };
+};
+const state = (g.__earshotStore ??= { cache: null, queue: Promise.resolve(), backend: null });
+
+async function backend(): Promise<Backend> {
+  if (!state.backend) {
+    if (process.env.DATABASE_URL) {
+      const { postgresBackend } = await import("./store-pg");
+      state.backend = postgresBackend(process.env.DATABASE_URL);
+    } else {
+      state.backend = fileBackend;
+    }
+  }
+  return state.backend;
+}
+
+export async function storageBackendName(): Promise<Backend["name"]> {
+  return (await backend()).name;
+}
+
+async function load(): Promise<StoreData> {
+  if (!state.cache) state.cache = await (await backend()).load();
+  return state.cache;
 }
 
 async function persist(data: StoreData): Promise<void> {
   applyRetention(data);
-  await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
-  const tmp = `${DATA_FILE}.${process.pid}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(data));
-  await fs.rename(tmp, DATA_FILE);
+  await (await backend()).persist(data);
 }
 
 /** Read-only snapshot. */
@@ -143,4 +241,5 @@ export function newId(prefix: string): string {
 export function __resetStoreCache(): void {
   state.cache = null;
   state.queue = Promise.resolve();
+  state.backend = null;
 }

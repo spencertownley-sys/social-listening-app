@@ -1,8 +1,5 @@
-import { NextResponse } from "next/server";
-import { SESSION_COOKIE } from "@/lib/auth";
+import { signedOut } from "@/lib/session-response";
 
 export async function POST() {
-  const res = new NextResponse(null, { status: 303, headers: { location: "/login" } });
-  res.cookies.delete(SESSION_COOKIE);
-  return res;
+  return signedOut();
 }

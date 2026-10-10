@@ -6,13 +6,13 @@ import type { Feedback, FeedbackAction, Sentiment } from "./types";
 
 /** Profile CRUD with versioning: every save writes a ProfileVersion snapshot (enables rollback). */
 
-export async function createProfile(input: unknown): Promise<ListeningProfile> {
+export async function createProfile(input: unknown, workspaceId: string): Promise<ListeningProfile> {
   const config = parseProfileConfig(input);
   return mutate((data) => {
     const now = new Date().toISOString();
     const profile: ListeningProfile = {
       id: newId("prf"),
-      workspaceId: data.workspace.id,
+      workspaceId,
       version: 1,
       status: "active",
       config,
