@@ -90,6 +90,25 @@ describe("alerts", () => {
   });
 });
 
+describe("re-labelling", () => {
+  it("redoes old offline labels, and offline labels once Claude is configured", async () => {
+    const { needsEnrichment } = await import("../enrich/claude");
+    const { HEURISTIC_MODEL } = await import("../enrich/heuristic");
+    const base = { postId: "p", sentiment: "neutral" as const, sentimentConfidence: 0.5, emotions: [], intents: [], topics: [] };
+    const saved = process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_AUTH_TOKEN;
+    expect(needsEnrichment(undefined)).toBe(true);
+    expect(needsEnrichment({ ...base, model: "heuristic-v1" })).toBe(true);
+    expect(needsEnrichment({ ...base, model: HEURISTIC_MODEL })).toBe(false);
+    expect(needsEnrichment({ ...base, model: "claude-haiku-5-5" })).toBe(false);
+    process.env.ANTHROPIC_API_KEY = "test";
+    expect(needsEnrichment({ ...base, model: HEURISTIC_MODEL })).toBe(true);
+    if (saved === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = saved;
+  });
+});
+
 describe("heuristic draft", () => {
   it("reads 'complaints' as a request for negative posts", async () => {
     const { heuristicDraft } = await import("../assist");

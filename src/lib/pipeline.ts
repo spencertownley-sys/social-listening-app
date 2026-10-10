@@ -5,7 +5,8 @@ import { mastodonConnector } from "./connectors/mastodon";
 import { rssConnector } from "./connectors/rss";
 import type { Connector } from "./connectors/types";
 import { youtubeConnector } from "./connectors/youtube";
-import { claudeEnabled, ENRICH_MODEL, enrichPosts } from "./enrich/claude";
+import { claudeEnabled, ENRICH_MODEL, enrichPosts, needsEnrichment } from "./enrich/claude";
+import { HEURISTIC_MODEL } from "./enrich/heuristic";
 import { buildPreFilter, compileProfile, matchPost } from "./matcher";
 import { activeSources, type ListeningProfile } from "./profile";
 import { atomToSearchString, fold, makeDoc } from "./query";
@@ -41,7 +42,13 @@ function searchTerms(profiles: ListeningProfile[]): string[] {
 
 /** Match every stored, enriched post against one profile (used after a save and after feedback). */
 export function rematchProfile(data: StoreData, profile: ListeningProfile, sinceMs?: number): Match[] {
-  for (const id of Object.keys(data.matches)) if (data.matches[id].profileId === profile.id) delete data.matches[id];
+  // Keep each surviving match's original createdAt so a re-match never re-triggers alerts.
+  const firstSeen = new Map<string, string>();
+  for (const id of Object.keys(data.matches)) {
+    if (data.matches[id].profileId !== profile.id) continue;
+    firstSeen.set(id, data.matches[id].createdAt);
+    delete data.matches[id];
+  }
   if (profile.status !== "active") return [];
   const compiled = compileProfile(profile);
   const learning = getLearning(data, profile.id);
@@ -52,6 +59,7 @@ export function rematchProfile(data: StoreData, profile: ListeningProfile, since
     if (!e) continue;
     const m = matchPost(compiled, post, e, learning);
     if (m) {
+      m.createdAt = firstSeen.get(m.id) ?? m.createdAt;
       data.matches[m.id] = m;
       out.push(m);
     }
@@ -63,7 +71,7 @@ export function rematchProfile(data: StoreData, profile: ListeningProfile, since
 async function enrichCandidates(data: StoreData, profiles: ListeningProfile[], sinceMs: number): Promise<number> {
   const filter = buildPreFilter(profiles);
   const pending = Object.values(data.posts).filter(
-    (p) => !data.enrichments[p.id] && Date.parse(p.postedAt) >= sinceMs && filter.test(p, makeDoc(p)),
+    (p) => needsEnrichment(data.enrichments[p.id]) && Date.parse(p.postedAt) >= sinceMs && filter.test(p, makeDoc(p)),
   );
   const enriched = await enrichPosts(pending.slice(0, 200));
   for (const e of enriched) data.enrichments[e.postId] = e;
@@ -117,7 +125,7 @@ export async function runIngest(opts: IngestOptions = {}): Promise<IngestRun> {
     // Cheap pre-filter on new posts, then AI enrichment only for survivors.
     const filter = buildPreFilter(data.profiles);
     const candidates = opts.demo ? fresh : fresh.filter((p) => filter.test(p, makeDoc(p)));
-    const enriched = await enrichPosts(candidates.filter((p) => !data.enrichments[p.id]));
+    const enriched = await enrichPosts(candidates.filter((p) => needsEnrichment(data.enrichments[p.id])));
     for (const e of enriched) data.enrichments[e.postId] = e;
 
     let matchCount = 0;
@@ -136,6 +144,11 @@ export async function runIngest(opts: IngestOptions = {}): Promise<IngestRun> {
       }
     }
 
+    // Labels from an older offline classifier (or offline labels once Claude is configured) are
+    // redone in the background of each run; affected profiles are re-matched.
+    const relabelled = await enrichCandidates(data, data.profiles.filter((p) => p.status === "active"), Date.now() - 90 * 86_400_000);
+    if (relabelled > 0) for (const profile of data.profiles) rematchProfile(data, profile);
+
     const alerts = opts.alerts === false ? [] : await runAlerts(data);
 
     const run: IngestRun = {
@@ -148,7 +161,7 @@ export async function runIngest(opts: IngestOptions = {}): Promise<IngestRun> {
       enriched: enriched.length,
       matches: matchCount,
       alerts: alerts.length,
-      enrichModel: claudeEnabled() ? ENRICH_MODEL : "heuristic-v1",
+      enrichModel: claudeEnabled() ? ENRICH_MODEL : HEURISTIC_MODEL,
       connectors: connectorLog,
     };
     data.runs.push(run);

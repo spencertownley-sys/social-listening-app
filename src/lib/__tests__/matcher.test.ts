@@ -38,6 +38,8 @@ describe("heuristic classifier", () => {
     expect(classifyText("Terrible service, rude staff, never again").sentiment).toBe("negative");
     expect(classifyText("The ship departs at 4pm").sentiment).toBe("neutral");
     expect(classifyText("not good at all").sentiment).toBe("negative");
+    // Negation stops at sentence breaks, and "no refund" is not praise.
+    expect(classifyText("Princess Cruises skipped Ensenada again with no explanation. Disappointed, and no refund offered.").sentiment).toBe("negative");
   });
   it("detects intents", () => {
     expect(classifyText("Any recommendations for a family cruise?").intents).toEqual(

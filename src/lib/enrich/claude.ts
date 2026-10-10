@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { EMOTIONS, INTENTS, SENTIMENTS, type Enrichment, type Post } from "../types";
-import { enrichHeuristic } from "./heuristic";
+import { enrichHeuristic, HEURISTIC_MODEL } from "./heuristic";
 
 /**
  * Sentiment / emotion / intent labelling with Claude. Per the PRD this is the "small fast model
@@ -97,4 +97,14 @@ export async function enrichPosts(posts: Post[]): Promise<Enrichment[]> {
     }
   }
   return out;
+}
+
+/**
+ * Whether a stored label should be redone: missing, from an older offline classifier, or offline
+ * when Claude is now available (adding ANTHROPIC_API_KEY upgrades existing labels).
+ */
+export function needsEnrichment(e: Enrichment | undefined): boolean {
+  if (!e) return true;
+  if (!e.model.startsWith("heuristic")) return false;
+  return e.model !== HEURISTIC_MODEL || claudeEnabled();
 }

@@ -1,6 +1,9 @@
 import { fold } from "../query";
 import type { Emotion, Enrichment, Intent, Post, Sentiment } from "../types";
 
+/** Bump when the rules change so stored labels from older versions get redone. */
+export const HEURISTIC_MODEL = "heuristic-v2";
+
 /**
  * Offline fallback classifier: a small lexicon with negation and intensifiers, plus regex intents.
  * It is deliberately simple; the Claude classifier replaces it whenever ANTHROPIC_API_KEY is set,
@@ -20,7 +23,7 @@ const NEGATIVE = new Set(
   (
     "hate hated awful terrible horrible worst bad poor disappointing disappointed disappointment angry " +
     "furious annoyed annoying frustrated frustrating rude dirty broken slow late delayed delay cancelled " +
-    "canceled refund scam ripoff overpriced useless sick ill outbreak norovirus crowded nightmare unacceptable " +
+    "canceled skipped scam ripoff overpriced useless sick ill outbreak norovirus crowded nightmare unacceptable " +
     "complaint complain complained ruined stuck lost dead mess sucks sucked boring gross unsafe lawsuit " +
     "fail failed failure bug buggy crash crashes crashing laggy expensive meh never"
   ).split(" "),
@@ -53,7 +56,7 @@ const INTENT_PATTERNS: [Intent, RegExp][] = [
 
 export function classifyText(text: string): Omit<Enrichment, "postId" | "model" | "topics"> {
   const folded = fold(text);
-  const tokens = folded.match(/[\p{L}']+|[!?]/gu) ?? [];
+  const tokens = folded.match(/[\p{L}']+|[!?.,;:]/gu) ?? [];
   let pos = 0;
   let neg = 0;
   for (let i = 0; i < tokens.length; i++) {
@@ -63,7 +66,11 @@ export function classifyText(text: string): Omit<Enrichment, "postId" | "model" 
     if (!isPos && !isNeg) continue;
     let weight = 1;
     let flipped = false;
-    for (let k = Math.max(0, i - 3); k < i; k++) {
+    // Look back up to 3 words for negators/intensifiers, stopping at punctuation so
+    // "no explanation. Disappointed" doesn't negate "disappointed".
+    let start = i;
+    while (start > Math.max(0, i - 3) && !/^[!?.,;:]$/.test(tokens[start - 1])) start--;
+    for (let k = start; k < i; k++) {
       if (NEGATORS.has(tokens[k])) flipped = !flipped;
       if (INTENSIFIERS.has(tokens[k])) weight = 1.5;
     }
@@ -105,6 +112,6 @@ export function enrichHeuristic(posts: Post[]): Enrichment[] {
     postId: p.id,
     ...classifyText([p.title, p.text].filter(Boolean).join("\n")),
     topics: [],
-    model: "heuristic-v1",
+    model: HEURISTIC_MODEL,
   }));
 }
