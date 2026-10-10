@@ -4,9 +4,9 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { IngestRun } from "@/lib/store";
 
-export function IngestButtons({ hasProfiles }: { hasProfiles: boolean }) {
+export function IngestButtons({ hasProfiles, hasDemo }: { hasProfiles: boolean; hasDemo: boolean }) {
   const router = useRouter();
-  const [busy, setBusy] = useState<"live" | "demo" | null>(null);
+  const [busy, setBusy] = useState<"live" | "demo" | "clear" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   async function run(demo: boolean) {
@@ -34,12 +34,28 @@ export function IngestButtons({ hasProfiles }: { hasProfiles: boolean }) {
     }
   }
 
+  async function clearDemo() {
+    if (!confirm("Remove the demo posts and their matches? Real posts are kept.")) return;
+    setBusy("clear");
+    const res = await fetch("/api/demo", { method: "DELETE" });
+    const body = (await res.json()) as { removed?: number };
+    setMessage(`Removed ${body.removed ?? 0} demo posts.`);
+    setBusy(null);
+    router.refresh();
+  }
+
   return (
     <div className="flex flex-col items-end gap-2">
       <div className="flex gap-2">
-        <button className="btn" onClick={() => run(true)} disabled={!!busy}>
-          {busy === "demo" ? "Loading…" : "Load demo posts"}
-        </button>
+        {hasDemo ? (
+          <button className="btn" onClick={clearDemo} disabled={!!busy}>
+            {busy === "clear" ? "Removing…" : "Remove demo posts"}
+          </button>
+        ) : (
+          <button className="btn" onClick={() => run(true)} disabled={!!busy}>
+            {busy === "demo" ? "Loading…" : "Load demo posts"}
+          </button>
+        )}
         <button
           className="btn-primary"
           onClick={() => run(false)}

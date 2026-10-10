@@ -4,12 +4,14 @@ import { INTENT_LABELS, NETWORK_LABELS } from "./types";
 
 /**
  * Email / in-app digest for a profile over its cadence window. The summary line is built from
- * counts; the AI-written summary from the PRD (P1) can replace `summaryLine` later.
+ * counts; when Claude is configured, sent digests also open with an AI-written summary
+ * (`aiSummary`, from summary.ts).
  */
 
 export interface Digest {
   subject: string;
   summaryLine: string;
+  aiSummary?: string;
   periodStart: string;
   periodEnd: string;
   items: FeedItem[];
@@ -23,7 +25,16 @@ function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 
-export function buildDigest(profile: ListeningProfile, feed: FeedItem[], now = new Date()): Digest {
+export function digestPeriodLabel(cadence: ListeningProfile["config"]["delivery"]["cadence"]): string {
+  return cadence === "weekly" ? "the past week" : cadence === "daily" ? "the past day" : "the past hour";
+}
+
+export function digestWindowItems(profile: ListeningProfile, feed: FeedItem[], now = new Date()): FeedItem[] {
+  const start = now.getTime() - CADENCE_HOURS[profile.config.delivery.cadence] * 3_600_000;
+  return feed.filter((it) => Date.parse(it.post.postedAt) >= start).sort((a, b) => b.match.relevance - a.match.relevance);
+}
+
+export function buildDigest(profile: ListeningProfile, feed: FeedItem[], now = new Date(), aiSummary?: string): Digest {
   const hours = CADENCE_HOURS[profile.config.delivery.cadence];
   const start = new Date(now.getTime() - hours * 3_600_000);
   const items = feed
@@ -51,6 +62,7 @@ export function buildDigest(profile: ListeningProfile, feed: FeedItem[], now = n
   const text = [
     `${profile.config.name}`,
     summaryLine,
+    ...(aiSummary ? ["", aiSummary] : []),
     "",
     ...top.map(
       (it) =>
@@ -61,6 +73,7 @@ export function buildDigest(profile: ListeningProfile, feed: FeedItem[], now = n
   const html = `<!doctype html><html><body style="font-family:system-ui,sans-serif;max-width:640px;margin:auto;color:#111">
 <h2 style="margin-bottom:4px">${esc(profile.config.name)}</h2>
 <p style="color:#444;margin-top:0">${esc(summaryLine)}</p>
+${aiSummary ? `<p style="background:#f4f6fb;border-radius:8px;padding:12px;line-height:1.5">${esc(aiSummary)}</p>` : ""}
 ${top
   .map(
     (it) => `<div style="border:1px solid #ddd;border-radius:8px;padding:12px;margin:10px 0">
@@ -75,6 +88,7 @@ ${top
   return {
     subject: `${profile.config.name}: ${summaryLine}`,
     summaryLine,
+    aiSummary,
     periodStart: start.toISOString(),
     periodEnd: now.toISOString(),
     items,

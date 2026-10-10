@@ -146,13 +146,48 @@ export async function runIngest(opts: IngestOptions = {}): Promise<IngestRun> {
     );
   }
 
+  const result = await ingestPosts(fetched, { prefilter: !opts.demo, alerts: opts.alerts, relabel: true });
+  const run: IngestRun = {
+    id: newId("run"),
+    startedAt,
+    finishedAt: new Date().toISOString(),
+    fetched: fetched.length,
+    newPosts: result.newPosts,
+    passedPreFilter: result.passedPreFilter,
+    enriched: result.enriched,
+    matches: result.matches,
+    alerts: result.alerts,
+    enrichModel: claudeEnabled() ? ENRICH_MODEL : HEURISTIC_MODEL,
+    connectors: connectorLog,
+  };
+  await mutate((data) => {
+    data.runs.push(run);
+  });
+  return run;
+}
+
+export interface IngestResult {
+  newPosts: number;
+  passedPreFilter: number;
+  enriched: number;
+  matches: number;
+  alerts: number;
+}
+
+/**
+ * Store, label, match and alert a batch of fetched posts. Shared by scheduled runs and the
+ * Bluesky firehose. Only new posts that pass the union pre-filter reach (paid) labelling.
+ */
+export async function ingestPosts(
+  fetched: Post[],
+  opts: { prefilter?: boolean; alerts?: boolean; relabel?: boolean } = {},
+): Promise<IngestResult> {
   return mutate(async (data) => {
     const fresh = dedupe(fetched, data.posts);
     for (const p of fresh) data.posts[p.id] = p;
 
-    // Cheap pre-filter on new posts, then AI enrichment only for survivors.
     const filter = buildPreFilter(data.profiles);
-    const candidates = opts.demo ? fresh : fresh.filter((p) => filter.test(p, makeDoc(p)));
+    const candidates = opts.prefilter === false ? fresh : fresh.filter((p) => filter.test(p, makeDoc(p)));
     const enriched = await enrichPosts(candidates.filter((p) => needsEnrichment(data.enrichments[p.id])));
     for (const e of enriched) data.enrichments[e.postId] = e;
 
@@ -172,28 +207,15 @@ export async function runIngest(opts: IngestOptions = {}): Promise<IngestRun> {
       }
     }
 
-    // Labels from an older offline classifier (or offline labels once Claude is configured) are
-    // redone in the background of each run; affected profiles are re-matched.
-    const relabelled = await enrichCandidates(data, data.profiles.filter((p) => p.status === "active"), Date.now() - 90 * 86_400_000);
-    if (relabelled > 0) for (const profile of data.profiles) rematchProfile(data, profile);
+    if (opts.relabel) {
+      // Labels from an older offline classifier (or offline labels once Claude is configured)
+      // are redone in the background of scheduled runs; affected profiles are re-matched.
+      const relabelled = await enrichCandidates(data, data.profiles.filter((p) => p.status === "active"), Date.now() - 90 * 86_400_000);
+      if (relabelled > 0) for (const profile of data.profiles) rematchProfile(data, profile);
+    }
 
     const alerts = opts.alerts === false ? [] : await runAlerts(data);
-
-    const run: IngestRun = {
-      id: newId("run"),
-      startedAt,
-      finishedAt: new Date().toISOString(),
-      fetched: fetched.length,
-      newPosts: fresh.length,
-      passedPreFilter: candidates.length,
-      enriched: enriched.length,
-      matches: matchCount,
-      alerts: alerts.length,
-      enrichModel: claudeEnabled() ? ENRICH_MODEL : HEURISTIC_MODEL,
-      connectors: connectorLog,
-    };
-    data.runs.push(run);
-    return run;
+    return { newPosts: fresh.length, passedPreFilter: candidates.length, enriched: enriched.length, matches: matchCount, alerts: alerts.length };
   });
 }
 

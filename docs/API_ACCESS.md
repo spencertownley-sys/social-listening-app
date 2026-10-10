@@ -13,7 +13,7 @@ TikTok and LinkedIn work by scraping against those platforms' terms; we don't us
 
 | Network | Keyword search? | Cost to start | Approval | Env vars |
 |---|---|---|---|---|
-| Bluesky | Yes | Free | None | `BLUESKY_HANDLE`, `BLUESKY_APP_PASSWORD` |
+| Bluesky | Real-time stream + search | Free | None | none for the stream; `BLUESKY_HANDLE`, `BLUESKY_APP_PASSWORD` for search |
 | YouTube | Yes (videos) | Free, 10,000 units/day (~100 searches) | None to start | `YOUTUBE_API_KEY` |
 | X | Yes (last 7 days) | Pay-per-use, ~$0.005 per post read | Self-serve | `X_BEARER_TOKEN`, `X_DAILY_POST_BUDGET` |
 | Reddit | Yes | Free for non-commercial; commercial is negotiated | Manual access request | `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, `REDDIT_USER_AGENT` |
@@ -26,13 +26,15 @@ TikTok and LinkedIn work by scraping against those platforms' terms; we don't us
 **Suggested order:** Bluesky and YouTube today (free, minutes). X next if the budget is OK. Then
 start the Reddit and Meta applications, which take days to weeks.
 
-## Bluesky (5 minutes, free)
-Bluesky's public search now refuses anonymous requests (403), so sign in with an app password.
+## Bluesky (no key needed; 5 minutes for search)
+New posts already arrive in real time, with no key, from Bluesky's free Jetstream firehose; the
+Connections page shows the stream's status. An app password adds hourly search, which also finds
+posts from before the server started (Bluesky's public search refuses anonymous requests).
 1. In the Bluesky app: **Settings → Privacy and security → App passwords → Add**.
 2. Set `BLUESKY_HANDLE` (e.g. `you.bsky.social`) and `BLUESKY_APP_PASSWORD`.
 
-Later: Bluesky's free Jetstream firehose gives every public post in real time with no key. It's
-on the build plan as the real-time upgrade.
+Settings: `BLUESKY_JETSTREAM=off` turns the stream off; `BLUESKY_FLUSH_SECONDS` (default 120)
+sets how often matched posts are saved and alerted on.
 
 ## YouTube (10 minutes, free)
 1. Go to https://console.cloud.google.com → create a project.

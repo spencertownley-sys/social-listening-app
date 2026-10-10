@@ -84,7 +84,11 @@ export function bskyToPost(v: BskyPostView): Post {
 export const blueskyConnector: Connector = {
   network: "bluesky",
   name: "Bluesky search",
-  unavailableReason: () => null,
+  // Without an app password, search 403s; the real-time Jetstream stream covers Bluesky instead.
+  unavailableReason: () =>
+    process.env.BLUESKY_HANDLE && process.env.BLUESKY_APP_PASSWORD
+      ? null
+      : "Hourly search needs BLUESKY_HANDLE + BLUESKY_APP_PASSWORD; the real-time stream covers new posts",
   async fetch(req: FetchRequest): Promise<Post[]> {
     const { base, headers } = await auth();
     const out: Post[] = [];

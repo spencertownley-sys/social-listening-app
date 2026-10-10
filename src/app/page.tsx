@@ -24,7 +24,7 @@ export default async function Home() {
             {lastRun ? ` · last run ${timeAgo(lastRun.finishedAt)}` : ""}
           </p>
         </div>
-        <IngestButtons hasProfiles={data.profiles.length > 0} />
+        <IngestButtons hasProfiles={data.profiles.length > 0} hasDemo={Object.values(data.posts).some((p) => /^demo\d+$/.test(p.externalId))} />
       </div>
 
       {data.profiles.length === 0 ? (

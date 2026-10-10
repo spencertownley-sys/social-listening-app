@@ -1,5 +1,6 @@
 import { CONNECTION_INFO, missingEnv, UNAVAILABLE } from "@/lib/connections";
 import { claudeEnabled } from "@/lib/enrich/claude";
+import { jetstreamStatus } from "@/lib/jetstream";
 import { read } from "@/lib/store";
 import { timeAgo } from "@/components/ui";
 
@@ -9,6 +10,7 @@ export default async function ConnectionsPage() {
   const data = await read();
   const lastRun = [...data.runs].reverse().find((r) => r.connectors.some((c) => c.network !== "demo"));
   const result = new Map(lastRun?.connectors.map((c) => [c.network, c]) ?? []);
+  const stream = jetstreamStatus();
 
   return (
     <div className="space-y-6">
@@ -56,6 +58,16 @@ export default async function ConnectionsPage() {
                 Cost: {info.cost} · Approval: {info.approval}
               </p>
               {info.note && <p className="text-muted">{info.note}</p>}
+              {info.network === "bluesky" && (
+                <p className={stream.connected ? "text-muted" : "text-danger"}>
+                  Real-time stream:{" "}
+                  {!stream.enabled
+                    ? "off (runs on the hosted server)"
+                    : stream.connected
+                      ? `connected · ${stream.received.toLocaleString()} posts seen, ${stream.kept.toLocaleString()} kept, ${stream.matches.toLocaleString()} matches${stream.lastFlushAt ? `, last saved ${timeAgo(stream.lastFlushAt)}` : ""}`
+                      : `reconnecting${stream.lastError ? ` (${stream.lastError})` : ""}`}
+                </p>
+              )}
               {r && (
                 <p className={r.error ? "text-danger" : "text-muted"}>
                   Last run: {r.error ? `skipped — ${r.error}` : `${r.fetched} posts`}
