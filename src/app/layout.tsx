@@ -29,6 +29,9 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
                 <Link href="/profiles/new" className="text-sm text-muted hover:text-foreground">
                   New profile
                 </Link>
+                <Link href="/connections" className="text-sm text-muted hover:text-foreground">
+                  Connections
+                </Link>
                 <Link href="/notifications" className="text-sm text-muted hover:text-foreground">
                   Notifications
                   {unread > 0 && (

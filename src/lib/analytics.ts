@@ -71,3 +71,37 @@ export function dashboardFor(items: FeedItem[], days = 14): Dashboard {
     intents: [...intents.entries()].map(([intent, count]) => ({ intent, count })).sort((a, b) => b.count - a.count),
   };
 }
+
+/**
+ * "Balanced" feed order: networks take turns in proportion to the profile's source weights, and
+ * each network's own posts stay in relevance order. A network with a hundred syndicated articles
+ * can't push the handful of Reddit or Bluesky posts off the first page.
+ */
+export function balanceByNetwork(items: FeedItem[], weights: Partial<Record<Network, number>>): FeedItem[] {
+  const queues = new Map<Network, FeedItem[]>();
+  for (const it of [...items].sort((a, b) => b.match.relevance - a.match.relevance)) {
+    const q = queues.get(it.post.network) ?? [];
+    q.push(it);
+    queues.set(it.post.network, q);
+  }
+  const taken = new Map<Network, number>();
+  const out: FeedItem[] = [];
+  while (out.length < items.length) {
+    let best: Network | null = null;
+    let bestScore = Infinity;
+    for (const [n, q] of queues) {
+      if (q.length === 0) continue;
+      const w = Math.max(1, weights[n] ?? 50);
+      // Lowest (taken / weight) goes next; ties go to the more relevant head post.
+      const score = (taken.get(n) ?? 0) / w - q[0].match.relevance / 1e6;
+      if (score < bestScore) {
+        bestScore = score;
+        best = n;
+      }
+    }
+    if (!best) break;
+    out.push(queues.get(best)!.shift()!);
+    taken.set(best, (taken.get(best) ?? 0) + 1);
+  }
+  return out;
+}

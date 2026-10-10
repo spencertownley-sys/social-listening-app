@@ -2,6 +2,10 @@ import { runAlerts } from "./alerts";
 import { blueskyConnector } from "./connectors/bluesky";
 import { demoPosts } from "./connectors/demo";
 import { mastodonConnector } from "./connectors/mastodon";
+import { instagramConnector } from "./connectors/instagram";
+import { redditConnector } from "./connectors/reddit";
+import { threadsConnector } from "./connectors/threads";
+import { xConnector } from "./connectors/x";
 import { rssConnector } from "./connectors/rss";
 import type { Connector } from "./connectors/types";
 import { youtubeConnector } from "./connectors/youtube";
@@ -13,14 +17,38 @@ import { atomToSearchString, fold, makeDoc } from "./query";
 import { getLearning, mutate, newId, read, type IngestRun, type StoreData } from "./store";
 import type { Match, Post } from "./types";
 
-export const CONNECTORS: Connector[] = [blueskyConnector, youtubeConnector, rssConnector, mastodonConnector];
+export const CONNECTORS: Connector[] = [
+  blueskyConnector,
+  redditConnector,
+  xConnector,
+  threadsConnector,
+  instagramConnector,
+  youtubeConnector,
+  rssConnector,
+  mastodonConnector,
+];
 
 const PREVIEW_DAYS = 7;
 
 /** Collapse exact repeats (same network id) and near-duplicates (same normalized text, e.g. cross-posts). */
+/** Headline without the " - Publisher" / " | Publisher" suffix news feeds append. */
+export function storyKey(title: string): string {
+  return fold(title)
+    .replace(/\s+[-–—|]\s+[^-–—|]{2,60}$/, "")
+    .replace(/\W+/g, " ")
+    .trim();
+}
+
+/**
+ * Collapse exact repeats (same network id), near-duplicates (same author + text, e.g. cross-posts),
+ * and syndicated news (the same headline from several outlets counts once).
+ */
 export function dedupe(posts: Post[], existing: Record<string, Post> = {}): Post[] {
   const seenIds = new Set(Object.keys(existing));
-  const textKey = (p: Post) => `${fold(p.author.handle)}|${fold([p.title, p.text].join(" ")).replace(/\W+/g, " ").trim().slice(0, 280)}`;
+  const textKey = (p: Post) =>
+    p.network === "news" && p.title && storyKey(p.title).length >= 20
+      ? `news|${storyKey(p.title)}`
+      : `${fold(p.author.handle)}|${fold([p.title, p.text].join(" ")).replace(/\W+/g, " ").trim().slice(0, 280)}`;
   const seenText = new Set(Object.values(existing).map(textKey));
   const out: Post[] = [];
   for (const p of posts) {

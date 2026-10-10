@@ -38,7 +38,7 @@ let session: { accessJwt: string; service: string; expires: number } | null = nu
 async function auth(): Promise<{ base: string; headers: Record<string, string> }> {
   const identifier = process.env.BLUESKY_HANDLE;
   const password = process.env.BLUESKY_APP_PASSWORD;
-  if (!identifier || !password) return { base: "https://public.api.bsky.app", headers: {} };
+  if (!identifier || !password) return { base: "https://public.api.bsky.app", headers: {} as Record<string, string> };
   if (!session || session.expires < Date.now()) {
     const service = process.env.BLUESKY_SERVICE ?? "https://bsky.social";
     const res = await getJson<{ accessJwt: string }>(`${service}/xrpc/com.atproto.server.createSession`, {
@@ -94,7 +94,15 @@ export const blueskyConnector: Connector = {
       url.searchParams.set("sort", "latest");
       url.searchParams.set("since", req.since.toISOString());
       url.searchParams.set("limit", String(Math.min(100, req.limit)));
-      const res = await getJson<{ posts: BskyPostView[] }>(url.toString(), { headers });
+      let res: { posts: BskyPostView[] };
+      try {
+        res = await getJson<{ posts: BskyPostView[] }>(url.toString(), { headers });
+      } catch (e) {
+        if (!headers.authorization && /\b403\b/.test((e as Error).message)) {
+          throw new Error("Bluesky search needs sign-in: set BLUESKY_HANDLE and BLUESKY_APP_PASSWORD (Settings → App passwords)");
+        }
+        throw e;
+      }
       out.push(...res.posts.map(bskyToPost));
     }
     return out;

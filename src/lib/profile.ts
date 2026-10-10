@@ -131,9 +131,17 @@ export function activeSources(config: Pick<ProfileConfig, "sources">): Network[]
 }
 
 /** The networks the MVP has connectors for. Others can be toggled but won't ingest yet. */
-export const LIVE_NETWORKS: Network[] = ["bluesky", "youtube", "news", "mastodon"];
+/** Networks with a connector (some need keys; see the Connections page). */
+export const LIVE_NETWORKS: Network[] = ["bluesky", "reddit", "x", "threads", "instagram", "youtube", "news", "mastodon"];
 
-const ALL_LIVE_ON = Object.fromEntries(LIVE_NETWORKS.map((n) => [n, 100])) as Partial<Record<Network, number>>;
+/**
+ * Default weight per network for new profiles. News is articles about a topic rather than people
+ * talking about it, and one story is syndicated across many outlets, so it starts low to keep
+ * conversation from being drowned out. Users can raise it in the builder.
+ */
+export const DEFAULT_WEIGHTS: Partial<Record<Network, number>> = { bluesky: 100, reddit: 100, youtube: 80, mastodon: 80, news: 30 };
+
+const ALL_LIVE_ON = DEFAULT_WEIGHTS;
 
 export interface ProfileTemplate {
   id: string;

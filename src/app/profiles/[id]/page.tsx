@@ -11,7 +11,7 @@ export default async function FeedPage({ params }: { params: Promise<{ id: strin
   return (
     <>
       <ProfileHeader profile={profile} versions={versions} current="feed" />
-      <Feed profileId={profile.id} items={feedFor(data, profile.id)} now={renderedAt} />
+      <Feed profileId={profile.id} items={feedFor(data, profile.id)} now={renderedAt} weights={profile.config.sources} />
     </>
   );
 }
