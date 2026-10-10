@@ -95,7 +95,7 @@ export function heuristicDraft(text: string): ProfileDraft {
 
   const lower = fold(text);
   let sentiment_keep: ProfileDraft["sentiment_keep"] = [...SENTIMENTS];
-  if (/\b(complain|negative|angry|upset|bad review|problems?)\b/.test(lower)) sentiment_keep = ["negative", "mixed"];
+  if (/\b(complain\w*|negative|angry|upset|bad reviews?|problems?)\b/.test(lower)) sentiment_keep = ["negative", "mixed"];
   else if (/\b(positive|happy|praise|fans?|love|reshare)\b/.test(lower)) sentiment_keep = ["positive", "mixed"];
 
   const intents: ProfileDraft["intents"] = [];

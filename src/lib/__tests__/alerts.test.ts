@@ -90,6 +90,13 @@ describe("alerts", () => {
   });
 });
 
+describe("heuristic draft", () => {
+  it("reads 'complaints' as a request for negative posts", async () => {
+    const { heuristicDraft } = await import("../assist");
+    expect(heuristicDraft("cruise ship wifi complaints").sentiment_keep).toEqual(["negative", "mixed"]);
+  });
+});
+
 describe("auth", () => {
   const saved = { ...process.env };
   afterEach(() => {
