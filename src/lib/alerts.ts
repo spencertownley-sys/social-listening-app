@@ -58,6 +58,22 @@ function esc(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 }
 
+/** Slack treats <...> as links and mentions (<!channel>); escaping stops post text from using them. */
+export function slackEscape(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+type AlertText = Pick<AppNotification, "title" | "body">;
+
+export function slackPayload(profileName: string, n: AlertText): { text: string } {
+  return { text: `*${slackEscape(`${profileName}: ${n.title}`)}*\n${slackEscape(n.body)}` };
+}
+
+/** Discord: allowed_mentions with no parse types, so "@everyone" or "<@id>" in a post pings nobody. */
+export function discordPayload(profileName: string, n: AlertText): { content: string; allowed_mentions: { parse: never[] } } {
+  return { content: `**${profileName}: ${n.title}**\n${n.body}`.slice(0, 1990), allowed_mentions: { parse: [] } };
+}
+
 async function postJson(url: string, body: unknown): Promise<boolean> {
   try {
     const res = await fetch(url, {
@@ -82,10 +98,10 @@ async function deliver(profile: ListeningProfile, n: Omit<AppNotification, "id" 
     if (r.sent) done.push("email");
   }
   if (wanted.includes("slack") && process.env.SLACK_WEBHOOK_URL) {
-    if (await postJson(process.env.SLACK_WEBHOOK_URL, { text: `*${profile.config.name}: ${n.title}*\n${n.body}` })) done.push("slack");
+    if (await postJson(process.env.SLACK_WEBHOOK_URL, slackPayload(profile.config.name, n))) done.push("slack");
   }
   if (wanted.includes("discord") && process.env.DISCORD_WEBHOOK_URL) {
-    if (await postJson(process.env.DISCORD_WEBHOOK_URL, { content: `**${profile.config.name}: ${n.title}**\n${n.body}`.slice(0, 1990) })) done.push("discord");
+    if (await postJson(process.env.DISCORD_WEBHOOK_URL, discordPayload(profile.config.name, n))) done.push("discord");
   }
   if (wanted.includes("webhook") && process.env.ALERT_WEBHOOK_URL) {
     if (await postJson(process.env.ALERT_WEBHOOK_URL, { profile: { id: profile.id, name: profile.config.name }, ...n })) done.push("webhook");
