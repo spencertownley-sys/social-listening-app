@@ -52,6 +52,7 @@ export default function CookiesPage() {
         <List
           items={[
             "You can clear or block cookies and site storage in your browser settings. The items above are needed for the site to work: without the session cookie you can't stay signed in.",
+            "The Cookie settings button at the bottom of every page shows the cookie notice again.",
           ]}
         />
       </Section>

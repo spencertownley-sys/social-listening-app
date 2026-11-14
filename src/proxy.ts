@@ -15,9 +15,11 @@ const PUBLIC = [
   "/api/signup",
   "/api/health",
   "/api/cron",
-  // Policies must be readable before signing in.
+  // Policies must be readable before signing in, and the cookie notice loads on the sign-in pages.
   "/privacy",
   "/cookies",
+  "/cookie-banner.js",
+  "/cookie-banner.css",
 ];
 
 export async function proxy(req: NextRequest) {

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Script from "next/script";
 import { currentContext, visibleProfiles } from "@/lib/accounts";
 import { read } from "@/lib/store";
 import "./globals.css";
@@ -20,6 +21,9 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   }
   return (
     <html lang="en">
+      <head>
+        <link rel="stylesheet" href="/cookie-banner.css" />
+      </head>
       <body className="antialiased">
         <header className="border-b border-line bg-surface">
           <nav className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
@@ -67,7 +71,11 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           <Link href="/cookies" className="hover:text-foreground">
             Cookies
           </Link>
+          <button type="button" data-cookie-settings className="hover:text-foreground">
+            Cookie settings
+          </button>
         </footer>
+        <Script src="/cookie-banner.js" strategy="afterInteractive" data-cookie-banner data-mode="notice" data-policy-url="/cookies" />
       </body>
     </html>
   );
