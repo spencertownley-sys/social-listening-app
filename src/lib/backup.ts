@@ -87,7 +87,7 @@ export function canManageBackups(ctx: Context): boolean {
   return ctx.memberships.some((m) => m.workspaceId === DEFAULT_WORKSPACE_ID && m.role === "owner");
 }
 
-/** Who gets the backup email: BACKUP_TO, otherwise the owners of the main workspace. */
+/** Who gets the backup email: BACKUP_TO, otherwise the owners of the main workspace (never DIGEST_TO). */
 export function backupRecipients(data: StoreData): string[] {
   const configured = (process.env.BACKUP_TO ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   if (configured.length) return configured;
@@ -128,6 +128,10 @@ async function create(now: Date): Promise<BackupResult> {
   const sealed = key ? encryptBackup(gzipSync(JSON.stringify(withoutPasswordHashes(data))), key) : null;
   const attach = sealed !== null && sealed.length <= MAX_ATTACHMENT_BYTES;
 
+  // Never fall back to DIGEST_TO: digest readers are not necessarily trusted with a backup.
+  const to = backupRecipients(data);
+  if (to.length === 0) return { file, emailed: false, attached: false, emailNote: "No backup recipient: set BACKUP_TO or add an owner." };
+
   const posts = Object.keys(data.posts).length;
   const summary = `${data.profiles.length} profiles, ${posts} posts, ${Object.keys(data.matches).length} matches, ${data.users.length} users`;
   const text = [
@@ -147,7 +151,7 @@ async function create(now: Date): Promise<BackupResult> {
       .join(""),
     text,
     {
-      to: backupRecipients(data),
+      to,
       attachments: attach ? [{ filename: `${name}.enc`, content: sealed.toString("base64") }] : [],
     },
   );

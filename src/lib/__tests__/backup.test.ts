@@ -121,6 +121,16 @@ describe("backups", () => {
     expect(sent[0].text).toMatch(/BACKUP_ENCRYPTION_KEY is not set/);
   });
 
+  it("doesn't email anyone when there is no owner and no BACKUP_TO", async () => {
+    const sent = captureEmails();
+    vi.stubEnv("DIGEST_TO", "digest-reader@example.com");
+    vi.stubEnv("BACKUP_TO", "");
+    const r = await b.runBackup(new Date("2026-10-13T08:00:00Z"));
+    expect(sent).toHaveLength(0);
+    expect(r).toMatchObject({ emailed: false, emailNote: "No backup recipient: set BACKUP_TO or add an owner." });
+    expect(await b.listBackups()).toHaveLength(1);
+  });
+
   it("only accepts its own file names", () => {
     expect(b.isBackupName("earshot-2026-10-10T08-00.json.gz")).toBe(true);
     expect(b.isBackupName("../earshot.json")).toBe(false);
