@@ -12,8 +12,12 @@ import { DEFAULT_WORKSPACE_ID, mutate, newId, read, type Invite, type Membership
  *  - Roles: owner (everything, incl. members), editor (profiles, feedback, listening), viewer (read).
  */
 
-const scrypt = promisify(scryptCb) as (pw: string, salt: Buffer, keylen: number, opts: { N: number; r: number; p: number }) => Promise<Buffer>;
-const N = 16384;
+const scrypt = promisify(scryptCb) as (pw: string, salt: Buffer, keylen: number, opts: { N: number; r: number; p: number; maxmem: number }) => Promise<Buffer>;
+// scrypt cost: N = 2^17, r = 8 (OWASP's recommendation). Each hash uses 128 MiB, so hashes run at
+// most two at a time. Older hashes made with N = 16384 still verify: N is stored in each hash.
+const N = 131072;
+const R = 8;
+const MAX_PARALLEL_HASHES = 2;
 const INVITE_DAYS = 7;
 
 export class AccountError extends Error {
@@ -23,17 +27,38 @@ export class AccountError extends Error {
   }
 }
 
+let activeHashes = 0;
+const waiting: (() => void)[] = [];
+
+/** Run one scrypt call, at most MAX_PARALLEL_HASHES at once, so a burst can't exhaust memory. */
+async function scryptLimited(password: string, salt: Buffer, keylen: number, n: number): Promise<Buffer> {
+  // A finishing hash hands its slot straight to the next waiter, so the cap holds exactly.
+  if (activeHashes >= MAX_PARALLEL_HASHES) await new Promise<void>((resolve) => waiting.push(resolve));
+  else activeHashes++;
+  try {
+    // maxmem must cover 128 * N * r bytes (Node's default allows only 32 MiB).
+    return await scrypt(password, salt, keylen, { N: n, r: R, p: 1, maxmem: 256 * n * R });
+  } finally {
+    const next = waiting.shift();
+    if (next) next();
+    else activeHashes--;
+  }
+}
+
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16);
-  const hash = await scrypt(password, salt, 32, { N, r: 8, p: 1 });
+  const hash = await scryptLimited(password, salt, 32, N);
   return `scrypt$${N}$${salt.toString("base64url")}$${hash.toString("base64url")}`;
 }
 
 export async function verifyPassword(password: string, stored: string): Promise<boolean> {
   const [alg, n, salt, hash] = stored.split("$");
   if (alg !== "scrypt" || !n || !salt || !hash) return false;
+  const cost = Number(n);
+  // Only powers of two up to 2^20 are valid here; refuse anything else rather than throw.
+  if (!Number.isInteger(cost) || cost < 2 || cost > 2 ** 20 || (cost & (cost - 1)) !== 0) return false;
   const expected = Buffer.from(hash, "base64url");
-  const actual = await scrypt(password, Buffer.from(salt, "base64url"), expected.length, { N: Number(n), r: 8, p: 1 });
+  const actual = await scryptLimited(password, Buffer.from(salt, "base64url"), expected.length, cost);
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
@@ -148,8 +173,9 @@ export async function setupFirstAccount(input: { setupCode: string; email: strin
 export async function login(emailInput: string, password: string): Promise<User | null> {
   const email = normalizeEmail(emailInput);
   const user = (await read()).users.find((u) => u.email === email);
-  // Hash even when the user doesn't exist so timing doesn't reveal which emails have accounts.
-  const ok = await verifyPassword(password, user?.passwordHash ?? "scrypt$16384$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+  // Hash even when the user doesn't exist (or has no password, after a restore) so timing doesn't
+  // reveal which emails have accounts.
+  const ok = await verifyPassword(password, user?.passwordHash || `scrypt$${N}$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`);
   return user && ok ? user : null;
 }
 
