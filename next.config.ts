@@ -32,7 +32,15 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   async headers() {
-    return [{ source: "/(.*)", headers: securityHeaders }];
+    return [
+      { source: "/(.*)", headers: securityHeaders },
+      // The rendered digest quotes post text and links: no scripts at all, and sandboxed. Listed
+      // last so it replaces the site-wide policy for this path (the route sets the same header).
+      {
+        source: "/api/profiles/:id/digest",
+        headers: [{ key: "Content-Security-Policy", value: "default-src 'none'; img-src https: data:; style-src 'unsafe-inline'; sandbox" }],
+      },
+    ];
   },
 };
 
