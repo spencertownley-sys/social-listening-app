@@ -1,4 +1,5 @@
 import { dashboardFor, type FeedItem } from "./analytics";
+import { safeHttpUrl } from "./connectors/types";
 import type { ListeningProfile } from "./profile";
 import { INTENT_LABELS, NETWORK_LABELS } from "./types";
 
@@ -66,7 +67,8 @@ export function buildDigest(profile: ListeningProfile, feed: FeedItem[], now = n
     "",
     ...top.map(
       (it) =>
-        `- [${it.sentiment}] ${NETWORK_LABELS[it.post.network]} · ${it.post.author.handle}: ${(it.post.title ?? it.post.text).slice(0, 180)}\n  ${it.post.url}`,
+        `- [${it.sentiment}] ${NETWORK_LABELS[it.post.network]} · ${it.post.author.handle}: ${(it.post.title ?? it.post.text).slice(0, 180)}` +
+        (safeHttpUrl(it.post.url) ? `\n  ${safeHttpUrl(it.post.url)}` : ""),
     ),
   ].join("\n");
 
@@ -80,7 +82,7 @@ ${top
 <div style="font-size:12px;color:#555">${esc(NETWORK_LABELS[it.post.network])} · ${esc(it.post.author.handle)} · <strong>${esc(it.sentiment)}</strong></div>
 <div style="margin:6px 0">${esc((it.post.title ? it.post.title + " — " : "") + it.post.text.slice(0, 400))}</div>
 <div style="font-size:12px;color:#555">Why: ${esc(it.match.reasons.map((r) => r.detail).join(" · "))}</div>
-<a href="${esc(it.post.url)}" style="font-size:12px">Open original</a></div>`,
+${safeHttpUrl(it.post.url) ? `<a href="${esc(safeHttpUrl(it.post.url))}" style="font-size:12px">Open original</a>` : ""}</div>`,
   )
   .join("\n")}
 </body></html>`;

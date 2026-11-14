@@ -20,6 +20,32 @@ export interface Connector {
   fetch(req: FetchRequest): Promise<Post[]>;
 }
 
+/**
+ * A link Earshot will store and render: only absolute http(s) URLs. Anything else (javascript:,
+ * data:, relative paths, garbage) becomes "", so a hostile feed can't plant script in a link.
+ */
+export function safeHttpUrl(u: string | null | undefined): string {
+  if (!u) return "";
+  try {
+    const { protocol } = new URL(u.trim());
+    return protocol === "http:" || protocol === "https:" ? u.trim() : "";
+  } catch {
+    return "";
+  }
+}
+
+/** Apply safeHttpUrl to every URL a post carries (its link, outbound links and media). */
+export function sanitizePostUrls(post: Post): Post {
+  return {
+    ...post,
+    url: safeHttpUrl(post.url),
+    links: post.links.map(safeHttpUrl).filter(Boolean),
+    media: post.media
+      .map((m) => ({ ...m, url: safeHttpUrl(m.url), thumbnailUrl: safeHttpUrl(m.thumbnailUrl) || undefined }))
+      .filter((m) => m.url || m.thumbnailUrl),
+  };
+}
+
 export function stripHtml(html: string): string {
   return decodeEntities(
     html

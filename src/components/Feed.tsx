@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { balanceByNetwork, type FeedItem } from "@/lib/analytics";
+import { safeHttpUrl } from "@/lib/connectors/types";
 import { NETWORK_LABELS, SENTIMENTS, type FeedbackAction, type Network, type Sentiment } from "@/lib/types";
 import { IntentChips, NetworkBadge, SentimentChip, timeAgo } from "./ui";
 
@@ -185,9 +186,11 @@ export function Feed({
                 </button>
                   </>
                 )}
-                <a className="btn" href={post.url} target="_blank" rel="noreferrer">
-                  Open original
-                </a>
+                {safeHttpUrl(post.url) && (
+                  <a className="btn" href={safeHttpUrl(post.url)} target="_blank" rel="noreferrer">
+                    Open original
+                  </a>
+                )}
               </div>
               {fixing === post.id && (
                 <div className="flex flex-wrap items-center gap-2 text-sm">

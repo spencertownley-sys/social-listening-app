@@ -21,7 +21,13 @@ export async function GET(_req: Request, { params }: Ctx) {
   const digest = await digestFor((await params).id, "read");
   if (digest instanceof NextResponse) return digest;
   if (!digest) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return new NextResponse(digest.html, { headers: { "content-type": "text/html; charset=utf-8" } });
+  // The digest quotes text and links from posts: render it with no scripts and in a sandbox.
+  return new NextResponse(digest.html, {
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "content-security-policy": "default-src 'none'; img-src https: data:; style-src 'unsafe-inline'; sandbox",
+    },
+  });
 }
 
 /** Send the digest now. */

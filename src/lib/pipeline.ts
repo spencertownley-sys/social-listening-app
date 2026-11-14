@@ -7,7 +7,7 @@ import { redditConnector } from "./connectors/reddit";
 import { threadsConnector } from "./connectors/threads";
 import { xConnector } from "./connectors/x";
 import { rssConnector } from "./connectors/rss";
-import type { Connector } from "./connectors/types";
+import { sanitizePostUrls, type Connector } from "./connectors/types";
 import { youtubeConnector } from "./connectors/youtube";
 import { claudeEnabled, ENRICH_MODEL, enrichPosts, needsEnrichment } from "./enrich/claude";
 import { HEURISTIC_MODEL } from "./enrich/heuristic";
@@ -182,8 +182,10 @@ export async function ingestPosts(
   fetched: Post[],
   opts: { prefilter?: boolean; alerts?: boolean; relabel?: boolean } = {},
 ): Promise<IngestResult> {
+  // Every connector's output goes through here: keep only http(s) links (ER-11).
+  const safe = fetched.map(sanitizePostUrls);
   return mutate(async (data) => {
-    const fresh = dedupe(fetched, data.posts);
+    const fresh = dedupe(safe, data.posts);
     for (const p of fresh) data.posts[p.id] = p;
 
     const filter = buildPreFilter(data.profiles);
