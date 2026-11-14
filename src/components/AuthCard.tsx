@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export function AuthCard({ title, children, note }: { title: string; children: React.ReactNode; note?: React.ReactNode }) {
   return (
     <div className="mx-auto mt-12 max-w-sm space-y-3">
@@ -6,6 +8,16 @@ export function AuthCard({ title, children, note }: { title: string; children: R
         {children}
       </div>
       {note && <p className="text-center text-sm text-muted">{note}</p>}
+      <p className="text-center text-xs text-muted">
+        How Earshot handles data:{" "}
+        <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">
+          Privacy
+        </Link>{" "}
+        and{" "}
+        <Link href="/cookies" className="underline underline-offset-2 hover:text-foreground">
+          Cookies
+        </Link>
+      </p>
     </div>
   );
 }
