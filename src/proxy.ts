@@ -20,6 +20,7 @@ const PUBLIC = [
   "/cookies",
   "/cookie-banner.js",
   "/cookie-banner.css",
+  "/robots.txt",
 ];
 
 export async function proxy(req: NextRequest) {

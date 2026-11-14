@@ -8,6 +8,8 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Earshot — social listening",
   description: "Social listening you set up in five minutes and tune like a playlist.",
+  // Private tool: keep the sign-in and setup pages out of search results.
+  robots: { index: false, follow: false },
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
