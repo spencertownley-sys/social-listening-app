@@ -223,6 +223,23 @@ export async function signOutEverywhere(ctx: Context): Promise<void> {
   });
 }
 
+/**
+ * A team member deletes their own account: the user, their memberships and their unused invites go.
+ * The last owner of a workspace can't, so a workspace is never left without someone in charge.
+ */
+export async function deleteOwnAccount(ctx: Context, password: string): Promise<void> {
+  if (!(await verifyPassword(password, ctx.user.passwordHash))) throw new AccountError("Your password didn't match.", 403);
+  await mutate((data) => {
+    for (const m of data.memberships.filter((x) => x.userId === ctx.user.id && x.role === "owner")) {
+      const owners = data.memberships.filter((x) => x.workspaceId === m.workspaceId && x.role === "owner");
+      if (owners.length <= 1) throw new AccountError("You're the only owner. Make someone else an owner (invite them as one) before deleting your account.", 409);
+    }
+    data.memberships = data.memberships.filter((m) => m.userId !== ctx.user.id);
+    data.users = data.users.filter((u) => u.id !== ctx.user.id);
+    data.invites = data.invites.filter((i) => !(i.createdBy === ctx.user.id && !i.usedAt));
+  });
+}
+
 export async function removeMember(ctx: Context, userId: string): Promise<void> {
   if (ctx.role !== "owner") throw new AccountError("Only owners can remove people.", 403);
   if (userId === ctx.user.id) throw new AccountError("You can't remove yourself.");

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { runAlerts } from "../alerts";
 import { buildDigest } from "../digest";
-import { eventToPost } from "../jetstream";
+import { applyDeletions, eventToDeletion, eventToPost } from "../jetstream";
 import { parseProfileConfig, type ListeningProfile } from "../profile";
 import { emptyData, type StoreData } from "../store";
 import type { Post, Sentiment } from "../types";
@@ -34,6 +34,29 @@ describe("Jetstream", () => {
     expect(eventToPost({ did: "d", time_us: 1, kind: "commit", commit: { operation: "delete", collection: "app.bsky.feed.post", rkey: "r" } })).toBeNull();
     expect(eventToPost({ did: "d", time_us: 1, kind: "identity" })).toBeNull();
     expect(eventToPost({ did: "d", time_us: 1, kind: "commit", commit: { operation: "create", collection: "app.bsky.feed.like", rkey: "r", record: { text: "x" } } })).toBeNull();
+  });
+
+  it("removes a stored post when its delete event arrives", () => {
+    const create = {
+      did: "did:plc:abc",
+      time_us: 1_791_633_600_000_000,
+      kind: "commit",
+      commit: { operation: "create", collection: "app.bsky.feed.post", rkey: "3kxyz", record: { text: "Cruise wifi is slow" } },
+    };
+    const post = eventToPost(create)!;
+    const data = emptyData();
+    data.posts[post.id] = post;
+    data.enrichments[post.id] = { postId: post.id } as never;
+    data.matches.m1 = { id: "m1", postId: post.id, profileId: "p" } as never;
+    const del = eventToDeletion({ ...create, commit: { operation: "delete", collection: "app.bsky.feed.post", rkey: "3kxyz" } });
+    expect(del).toEqual({ id: "bluesky:3kxyz", externalId: "at://did:plc:abc/app.bsky.feed.post/3kxyz" });
+    // Same record key from another account: not this post.
+    expect(applyDeletions(data, [{ ...del!, externalId: "at://did:plc:other/app.bsky.feed.post/3kxyz" }])).toBe(0);
+    expect(applyDeletions(data, [del!])).toBe(1);
+    expect(data.posts).toEqual({});
+    expect(data.enrichments).toEqual({});
+    expect(data.matches).toEqual({});
+    expect(eventToDeletion(create)).toBeNull();
   });
 });
 
