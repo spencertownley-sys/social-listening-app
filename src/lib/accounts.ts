@@ -164,11 +164,18 @@ export function findInvite(data: StoreData, token: string): Invite | null {
 export async function signupWithInvite(input: { token: string; email: string; name: string; password: string }): Promise<User> {
   const email = normalizeEmail(input.email);
   validate(email, input.password, input.name);
-  const passwordHash = await hashPassword(input.password);
-  return mutate((data) => {
+  const check = (data: StoreData): Invite => {
     const invite = findInvite(data, input.token);
     if (!invite) throw new AccountError("This invite link has expired or was already used. Ask for a new one.", 410);
     if (data.users.some((u) => u.email === email)) throw new AccountError("An account with that email already exists. Sign in instead.", 409);
+    return invite;
+  };
+  // Check the invite before hashing: scrypt is deliberately expensive, so a made-up token must not
+  // cost the server a hash. Checked again inside mutate in case the invite was used meanwhile.
+  check(await read());
+  const passwordHash = await hashPassword(input.password);
+  return mutate((data) => {
+    const invite = check(data);
     const user: User = { id: newId("usr"), email, name: input.name.trim(), passwordHash, sessionVersion: 1, createdAt: new Date().toISOString() };
     data.users.push(user);
     data.memberships.push({ workspaceId: invite.workspaceId, userId: user.id, role: invite.role });

@@ -64,6 +64,23 @@ const MINUTES_15 = 15 * 60_000;
 /** POST /api/setup: 5 attempts per 15 minutes per address. */
 export const setupLimiter = rateLimiter("setup", { max: 5, windowMs: MINUTES_15 });
 
+const loginByIp = rateLimiter("login-ip", { max: 10, windowMs: MINUTES_15 });
+const loginByEmail = rateLimiter("login-email", { max: 10, windowMs: MINUTES_15 });
+const signupByIp = rateLimiter("signup-ip", { max: 10, windowMs: MINUTES_15 });
+const signupByEmail = rateLimiter("signup-email", { max: 10, windowMs: MINUTES_15 });
+
+/**
+ * Sign-in and sign-up forms: 10 attempts per 15 minutes per address and per email address. Both
+ * counters are bumped on every attempt, so spreading guesses over many emails or many addresses
+ * still hits one of them.
+ */
+export function allowAuthAttempt(form: "login" | "signup", req: Request, email: string, now = Date.now()): boolean {
+  const [byIp, byEmail] = form === "login" ? [loginByIp, loginByEmail] : [signupByIp, signupByEmail];
+  const ip = byIp.hit(clientIp(req), now);
+  const mail = byEmail.hit(email.trim().toLowerCase(), now);
+  return ip.ok && mail.ok;
+}
+
 /** For tests. */
 export function __resetRateLimits(): void {
   for (const b of all.values()) b.clear();

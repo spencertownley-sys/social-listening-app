@@ -10,11 +10,13 @@ delete process.env.DATABASE_URL;
 let store: typeof import("../store");
 let limits: typeof import("../rate-limit");
 let setupRoute: typeof import("../../app/api/setup/route");
+let loginRoute: typeof import("../../app/api/login/route");
 
 beforeAll(async () => {
   store = await import("../store");
   limits = await import("../rate-limit");
   setupRoute = await import("../../app/api/setup/route");
+  loginRoute = await import("../../app/api/login/route");
 });
 
 beforeEach(async () => {
@@ -52,5 +54,30 @@ describe("POST /api/setup", () => {
     const again = await setupRoute.POST(form("/api/setup", { ...setupFields, email: "two@example.com" }));
     expect(again.status).toBe(303);
     expect(again.headers.get("location")).toBe("/login");
+  });
+});
+
+describe("POST /api/login", () => {
+  it("refuses the eleventh failed attempt from one address before checking the password", async () => {
+    await setupRoute.POST(form("/api/setup", { ...setupFields, setupCode: "setup-code" }, "192.0.2.1"));
+    const locations: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const res = await loginRoute.POST(form("/api/login", { email: `guess${i}@example.com`, password: "wrong-password", next: "/" }));
+      locations.push(res.headers.get("location") ?? "");
+    }
+    expect(locations.every((l) => l.startsWith("/login?error=1"))).toBe(true);
+    // Even the right password is refused once the address is over the limit.
+    const started = Date.now();
+    const blocked = await loginRoute.POST(form("/api/login", { email: "owner@example.com", password: "owner-password", next: "/" }));
+    expect(blocked.headers.get("location")).toMatch(/^\/login\?error=limit/);
+    expect(blocked.headers.get("set-cookie")).toBeNull();
+    expect(Date.now() - started).toBeLessThan(500);
+  }, 30_000);
+
+  it("limits guesses at one email address across many addresses", () => {
+    const req = (ip: string) => new Request("http://localhost/api/login", { method: "POST", headers: { "x-forwarded-for": ip } });
+    const results = Array.from({ length: 11 }, (_, i) => limits.allowAuthAttempt("login", req(`198.51.100.${i}`), " Owner@Example.com"));
+    expect(results.slice(0, 10).every(Boolean)).toBe(true);
+    expect(results[10]).toBe(false);
   });
 });
