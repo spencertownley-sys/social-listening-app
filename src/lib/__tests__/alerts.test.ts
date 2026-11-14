@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { detectSpike, inQuietHours, runAlerts } from "../alerts";
+import { detectSpike, discordPayload, inQuietHours, runAlerts, slackPayload } from "../alerts";
 import { feedFor } from "../analytics";
 import { checkSetupCode, isCronAuthorized, signSession, verifySession } from "../auth";
 import { demoPosts } from "../connectors/demo";
@@ -149,5 +149,25 @@ describe("auth", () => {
     expect(isCronAuthorized(null)).toBe(false);
     delete process.env.CRON_SECRET;
     expect(isCronAuthorized("Bearer ")).toBe(false);
+  });
+});
+
+describe("chat alert payloads", () => {
+  const n = { title: "2 new mentions", body: "• [negative] Bluesky · troll: <!channel> @everyone <https://evil.example|click me> & more" };
+
+  it("escapes Slack control characters so post text can't ping or link", () => {
+    const { text } = slackPayload("Cruise <team>", n);
+    expect(text).toContain("&lt;!channel&gt;");
+    expect(text).toContain("&lt;https://evil.example|click me&gt;");
+    expect(text).toContain("&amp; more");
+    expect(text).toContain("*Cruise &lt;team&gt;: 2 new mentions*");
+    expect(text).not.toMatch(/<!channel>/);
+  });
+
+  it("tells Discord not to parse any mentions", () => {
+    const payload = discordPayload("Cruise", n);
+    expect(payload.allowed_mentions.parse).toEqual([]);
+    expect(payload.content).toContain("@everyone");
+    expect(payload.content.length).toBeLessThanOrEqual(1990);
   });
 });

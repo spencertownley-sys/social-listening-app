@@ -7,7 +7,7 @@ import { redditConnector } from "./connectors/reddit";
 import { threadsConnector } from "./connectors/threads";
 import { xConnector } from "./connectors/x";
 import { rssConnector } from "./connectors/rss";
-import type { Connector } from "./connectors/types";
+import { sanitizePostUrls, type Connector } from "./connectors/types";
 import { youtubeConnector } from "./connectors/youtube";
 import { claudeEnabled, ENRICH_MODEL, enrichPosts, needsEnrichment } from "./enrich/claude";
 import { HEURISTIC_MODEL } from "./enrich/heuristic";
@@ -113,7 +113,23 @@ export interface IngestOptions {
   alerts?: boolean;
 }
 
-export async function runIngest(opts: IngestOptions = {}): Promise<IngestRun> {
+const inflight = globalThis as typeof globalThis & { __earshotIngest?: Partial<Record<"live" | "demo", Promise<IngestRun>>> };
+const running = (inflight.__earshotIngest ??= {});
+
+/**
+ * Fetch from every connector the active profiles use, then store, label, match and alert. Never
+ * two at once: a call while a run of the same kind is going shares that run (and its paid API
+ * calls) instead of starting another, whether it comes from the scheduler, /api/cron or a button.
+ */
+export function runIngest(opts: IngestOptions = {}): Promise<IngestRun> {
+  const kind = opts.demo ? "demo" : "live";
+  running[kind] ??= runIngestNow(opts).finally(() => {
+    running[kind] = undefined;
+  });
+  return running[kind];
+}
+
+async function runIngestNow(opts: IngestOptions): Promise<IngestRun> {
   const startedAt = new Date().toISOString();
   const snapshot = await read();
   const profiles = snapshot.profiles.filter((p) => p.status === "active");
@@ -182,8 +198,10 @@ export async function ingestPosts(
   fetched: Post[],
   opts: { prefilter?: boolean; alerts?: boolean; relabel?: boolean } = {},
 ): Promise<IngestResult> {
+  // Every connector's output goes through here: keep only http(s) links (ER-11).
+  const safe = fetched.map(sanitizePostUrls);
   return mutate(async (data) => {
-    const fresh = dedupe(fetched, data.posts);
+    const fresh = dedupe(safe, data.posts);
     for (const p of fresh) data.posts[p.id] = p;
 
     const filter = buildPreFilter(data.profiles);

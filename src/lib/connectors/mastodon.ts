@@ -1,5 +1,5 @@
 import type { Post } from "../types";
-import { getJson, nowIso, stripHtml, type Connector, type FetchRequest } from "./types";
+import { getJson, nowIso, safeHttpUrl, stripHtml, type Connector, type FetchRequest } from "./types";
 
 /**
  * Mastodon public hashtag timelines (no auth needed). Full-text search on Mastodon requires an
@@ -26,14 +26,15 @@ interface MastodonStatus {
 
 export function mastodonToPost(s: MastodonStatus, instance: string): Post {
   const links = [...s.content.matchAll(/href="([^"]+)"/g)]
-    .map((m) => m[1])
-    .filter((u) => !/\/tags\/|\/@/.test(u));
-  if (s.card?.url) links.push(s.card.url);
+    .map((m) => safeHttpUrl(m[1]))
+    .filter((u) => u && !/\/tags\/|\/@/.test(u));
+  const card = safeHttpUrl(s.card?.url);
+  if (card) links.push(card);
   return {
     id: `mastodon:${s.uri}`,
     network: "mastodon",
     externalId: s.uri,
-    url: s.url ?? s.uri,
+    url: safeHttpUrl(s.url ?? s.uri),
     author: {
       handle: s.account.acct.includes("@") ? s.account.acct : `${s.account.acct}@${instance}`,
       displayName: s.account.display_name,
@@ -47,8 +48,8 @@ export function mastodonToPost(s: MastodonStatus, instance: string): Post {
     kind: s.in_reply_to_id ? "reply" : "original",
     media: s.media_attachments.map((m) => ({
       type: m.type === "video" || m.type === "gifv" ? "video" : "image",
-      url: m.url,
-      thumbnailUrl: m.preview_url,
+      url: safeHttpUrl(m.url),
+      thumbnailUrl: safeHttpUrl(m.preview_url) || undefined,
     })),
     links: [...new Set(links)],
     engagement: { likes: s.favourites_count, reposts: s.reblogs_count, replies: s.replies_count },

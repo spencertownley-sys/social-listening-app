@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import { claudeEnabled } from "./enrich/claude";
+import { UserError } from "./errors";
 import { fold } from "./query";
 import { INTENTS, SENTIMENTS } from "./types";
 
@@ -35,7 +36,7 @@ let client: Anthropic | null = null;
 
 export async function draftProfile(description: string): Promise<{ draft: ProfileDraft; source: "claude" | "heuristic" }> {
   const text = description.trim().slice(0, 2000);
-  if (!text) throw new Error("Describe what you want to listen for.");
+  if (!text) throw new UserError("Describe what you want to listen for.");
   if (!claudeEnabled()) return { draft: heuristicDraft(text), source: "heuristic" };
 
   client ??= new Anthropic();

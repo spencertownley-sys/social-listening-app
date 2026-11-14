@@ -71,3 +71,16 @@ body {
 .chip {
   @apply inline-flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-xs;
 }
+
+/* Cookie notice (public/cookie-banner.css) in the site's colours; the tokens above already switch
+   for dark mode. ":root .cb" outranks the kit's own ".cb" defaults whatever order they load in. */
+:root .cb {
+  --cb-bg: var(--surface);
+  --cb-fg: var(--foreground);
+  --cb-muted: var(--muted);
+  --cb-accent: var(--accent);
+  --cb-accent-fg: var(--accent-ink);
+  --cb-border: var(--line);
+  --cb-radius: 8px;
+  --cb-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}

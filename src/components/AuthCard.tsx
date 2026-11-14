@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export function AuthCard({ title, children, note }: { title: string; children: React.ReactNode; note?: React.ReactNode }) {
   return (
     <div className="mx-auto mt-12 max-w-sm space-y-3">
@@ -6,6 +8,19 @@ export function AuthCard({ title, children, note }: { title: string; children: R
         {children}
       </div>
       {note && <p className="text-center text-sm text-muted">{note}</p>}
+      <p className="text-center text-xs text-muted">
+        <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">
+          Privacy
+        </Link>
+        {" · "}
+        <Link href="/cookies" className="underline underline-offset-2 hover:text-foreground">
+          Cookies
+        </Link>
+        {" · "}
+        <Link href="/terms" className="underline underline-offset-2 hover:text-foreground">
+          Terms
+        </Link>
+      </p>
     </div>
   );
 }

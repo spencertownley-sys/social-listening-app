@@ -2,7 +2,7 @@ import { ingestPosts } from "./pipeline";
 import { buildPreFilter, type PreFilter } from "./matcher";
 import { activeSources } from "./profile";
 import { makeDoc } from "./query";
-import { read } from "./store";
+import { mutate, read, removePosts, type StoreData } from "./store";
 import type { Post } from "./types";
 
 /**
@@ -11,6 +11,9 @@ import type { Post } from "./types";
  * listen on Bluesky; the few that could match are buffered and handed to the normal pipeline
  * every BLUESKY_FLUSH_SECONDS (default 120), which labels, matches and sends real-time alerts.
  *
+ * Delete events for posts Earshot has stored remove the post and everything derived from it at
+ * the next flush, so a post its author deleted on Bluesky doesn't stay here.
+ *
  * The stream resumes from its last cursor after a disconnect (Jetstream keeps a short replay
  * window). Author handles are resolved from the DID through plc.directory and cached.
  * Turn it off with BLUESKY_JETSTREAM=off.
@@ -18,6 +21,7 @@ import type { Post } from "./types";
 
 const URL_DEFAULT = "wss://jetstream2.us-east.bsky.network/subscribe?wantedCollections=app.bsky.feed.post";
 const MAX_BUFFER = 2000;
+const MAX_DELETES = 50_000;
 
 interface JetstreamEvent {
   did: string;
@@ -54,6 +58,8 @@ interface State {
   ws?: WebSocket;
   cursor?: number;
   buffer: Post[];
+  /** Posts deleted on Bluesky since the last flush, by post id → its at:// URI. */
+  deletes: Map<string, string>;
   filter?: PreFilter;
   status: JetstreamStatus;
   retryMs: number;
@@ -92,6 +98,23 @@ export function eventToPost(ev: JetstreamEvent): Post | null {
   };
 }
 
+/** For a delete event of a post: the id Earshot stores it under and its at:// URI. Exported for tests. */
+export function eventToDeletion(ev: JetstreamEvent): { id: string; externalId: string } | null {
+  const c = ev.commit;
+  if (ev.kind !== "commit" || !c || c.operation !== "delete" || c.collection !== "app.bsky.feed.post") return null;
+  return { id: `bluesky:${c.rkey}`, externalId: `at://${ev.did}/app.bsky.feed.post/${c.rkey}` };
+}
+
+/**
+ * Remove stored posts that were deleted on Bluesky. The at:// URI must match too, because post
+ * ids only carry the record key. Returns how many were removed. Exported for tests.
+ */
+export function applyDeletions(data: StoreData, deletions: Iterable<{ id: string; externalId: string }>): number {
+  const ids: string[] = [];
+  for (const d of deletions) if (data.posts[d.id]?.externalId === d.externalId) ids.push(d.id);
+  return removePosts(data, ids);
+}
+
 const handles = new Map<string, string>();
 
 async function resolveHandle(did: string): Promise<string | null> {
@@ -118,7 +141,25 @@ async function refreshFilter(state: State): Promise<void> {
   state.filter = listening.length ? buildPreFilter(listening) : undefined;
 }
 
+async function flushDeletes(state: State): Promise<void> {
+  if (state.deletes.size === 0) return;
+  const deletions = [...state.deletes].map(([id, externalId]) => ({ id, externalId }));
+  state.deletes.clear();
+  // Almost every delete on the firehose is for a post Earshot never kept: only write when needed.
+  const data = await read();
+  const relevant = deletions.filter((d) => data.posts[d.id]?.externalId === d.externalId);
+  if (relevant.length === 0) return;
+  try {
+    const removed = await mutate((d) => applyDeletions(d, relevant));
+    if (removed) console.log(`[jetstream] removed ${removed} post${removed === 1 ? "" : "s"} deleted on Bluesky`);
+  } catch (e) {
+    state.status.lastError = `delete failed: ${(e as Error).message}`;
+    console.error("[jetstream]", state.status.lastError);
+  }
+}
+
 async function flush(state: State): Promise<void> {
+  await flushDeletes(state);
   if (state.buffer.length === 0) return;
   const batch = state.buffer.splice(0, state.buffer.length);
   await Promise.all(
@@ -163,6 +204,11 @@ function connect(state: State): void {
     }
     state.cursor = ev.time_us;
     state.status.lastEventAt = new Date(ev.time_us / 1000).toISOString();
+    const deletion = eventToDeletion(ev);
+    if (deletion) {
+      if (state.deletes.size < MAX_DELETES) state.deletes.set(deletion.id, deletion.externalId);
+      return;
+    }
     if (!state.filter) return;
     const post = eventToPost(ev);
     if (!post || !state.filter.test(post, makeDoc(post))) return;
@@ -184,6 +230,7 @@ export function startJetstream(): void {
   if (g.__earshotJetstream || process.env.BLUESKY_JETSTREAM === "off") return;
   const state: State = {
     buffer: [],
+    deletes: new Map(),
     retryMs: 1000,
     timers: [],
     status: { enabled: true, connected: false, received: 0, kept: 0, flushed: 0, matches: 0 },

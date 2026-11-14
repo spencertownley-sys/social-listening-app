@@ -1,5 +1,5 @@
 import type { Post } from "../types";
-import { decodeEntities, nowIso, stripHtml, type Connector, type FetchRequest } from "./types";
+import { decodeEntities, nowIso, safeHttpUrl, stripHtml, type Connector, type FetchRequest } from "./types";
 
 /**
  * News, blogs and podcasts through RSS/Atom.
@@ -61,20 +61,22 @@ function feedHost(url: string): string {
 export function itemToPost(item: FeedItem, feedUrl: string): Post | null {
   if (!item.link && !item.guid) return null;
   const postedAt = item.date && !Number.isNaN(Date.parse(item.date)) ? new Date(item.date).toISOString() : nowIso();
-  const host = feedHost(item.link || feedUrl);
   const key = item.guid || item.link;
+  // Feeds are untrusted: only http(s) links are kept.
+  const link = safeHttpUrl(item.link);
+  const host = feedHost(link || feedUrl);
   return {
     id: `news:${Buffer.from(key).toString("base64url").slice(0, 48)}`,
     network: "news",
     externalId: key,
-    url: item.link,
+    url: link,
     author: { handle: item.author || host, displayName: item.author || host },
     title: item.title,
     text: item.body.slice(0, 4000),
     postedAt,
     kind: "original",
     media: [],
-    links: item.link ? [item.link] : [],
+    links: link ? [link] : [],
     engagement: {},
     ingestedAt: nowIso(),
   };

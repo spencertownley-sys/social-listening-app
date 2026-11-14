@@ -12,8 +12,12 @@ import { DEFAULT_WORKSPACE_ID, mutate, newId, read, type Invite, type Membership
  *  - Roles: owner (everything, incl. members), editor (profiles, feedback, listening), viewer (read).
  */
 
-const scrypt = promisify(scryptCb) as (pw: string, salt: Buffer, keylen: number, opts: { N: number; r: number; p: number }) => Promise<Buffer>;
-const N = 16384;
+const scrypt = promisify(scryptCb) as (pw: string, salt: Buffer, keylen: number, opts: { N: number; r: number; p: number; maxmem: number }) => Promise<Buffer>;
+// scrypt cost: N = 2^17, r = 8 (OWASP's recommendation). Each hash uses 128 MiB, so hashes run at
+// most two at a time. Older hashes made with N = 16384 still verify: N is stored in each hash.
+const N = 131072;
+const R = 8;
+const MAX_PARALLEL_HASHES = 2;
 const INVITE_DAYS = 7;
 
 export class AccountError extends Error {
@@ -23,17 +27,38 @@ export class AccountError extends Error {
   }
 }
 
+let activeHashes = 0;
+const waiting: (() => void)[] = [];
+
+/** Run one scrypt call, at most MAX_PARALLEL_HASHES at once, so a burst can't exhaust memory. */
+async function scryptLimited(password: string, salt: Buffer, keylen: number, n: number): Promise<Buffer> {
+  // A finishing hash hands its slot straight to the next waiter, so the cap holds exactly.
+  if (activeHashes >= MAX_PARALLEL_HASHES) await new Promise<void>((resolve) => waiting.push(resolve));
+  else activeHashes++;
+  try {
+    // maxmem must cover 128 * N * r bytes (Node's default allows only 32 MiB).
+    return await scrypt(password, salt, keylen, { N: n, r: R, p: 1, maxmem: 256 * n * R });
+  } finally {
+    const next = waiting.shift();
+    if (next) next();
+    else activeHashes--;
+  }
+}
+
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16);
-  const hash = await scrypt(password, salt, 32, { N, r: 8, p: 1 });
+  const hash = await scryptLimited(password, salt, 32, N);
   return `scrypt$${N}$${salt.toString("base64url")}$${hash.toString("base64url")}`;
 }
 
 export async function verifyPassword(password: string, stored: string): Promise<boolean> {
   const [alg, n, salt, hash] = stored.split("$");
   if (alg !== "scrypt" || !n || !salt || !hash) return false;
+  const cost = Number(n);
+  // Only powers of two up to 2^20 are valid here; refuse anything else rather than throw.
+  if (!Number.isInteger(cost) || cost < 2 || cost > 2 ** 20 || (cost & (cost - 1)) !== 0) return false;
   const expected = Buffer.from(hash, "base64url");
-  const actual = await scrypt(password, Buffer.from(salt, "base64url"), expected.length, { N: Number(n), r: 8, p: 1 });
+  const actual = await scryptLimited(password, Buffer.from(salt, "base64url"), expected.length, cost);
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
@@ -102,22 +127,44 @@ export async function sessionCookieFor(user: User): Promise<{ name: string; valu
 // ---------------------------------------------------------------------------------------------
 // Flows
 
-export async function needsSetup(): Promise<boolean> {
-  return (await read()).users.length === 0;
+/** True while nobody can sign in: a new site, or one restored from an emailed backup (no password hashes). */
+export function isUnclaimed(data: StoreData): boolean {
+  return !data.users.some((u) => u.passwordHash);
 }
 
-/** Create the first account; it owns the pre-existing workspace and its data. */
+export async function needsSetup(): Promise<boolean> {
+  return isUnclaimed(await read());
+}
+
+/**
+ * Create the first account; it owns the pre-existing workspace and its data. On a site restored
+ * from an emailed backup (accounts kept, password hashes stripped), an existing account with the
+ * same email gets this password instead and becomes an owner.
+ */
 export async function setupFirstAccount(input: { setupCode: string; email: string; name: string; password: string }): Promise<User> {
+  // Refuse before looking at the code once the site is claimed, so the endpoint can't be used to
+  // test guesses of the code (a wrong code and a right one now get the same answer).
+  const claimed = () => new AccountError("This site already has an account. Sign in instead.", 409);
+  if (!isUnclaimed(await read())) throw claimed();
   const email = normalizeEmail(input.email);
   validate(email, input.password, input.name);
   if (!(await checkSetupCode(input.setupCode))) throw new AccountError("That setup code didn't match.", 403);
   const passwordHash = await hashPassword(input.password);
   return mutate((data) => {
-    if (data.users.length > 0) throw new AccountError("This site already has an account. Sign in instead.", 409);
-    const user: User = { id: newId("usr"), email, name: input.name.trim(), passwordHash, sessionVersion: 1, createdAt: new Date().toISOString() };
-    data.users.push(user);
+    if (!isUnclaimed(data)) throw claimed();
     const workspaceId = data.workspaces[0]?.id ?? DEFAULT_WORKSPACE_ID;
-    if (!data.workspaces.some((w) => w.id === workspaceId)) data.workspaces.push({ id: workspaceId, name: "My workspace", createdAt: user.createdAt });
+    const now = new Date().toISOString();
+    if (!data.workspaces.some((w) => w.id === workspaceId)) data.workspaces.push({ id: workspaceId, name: "My workspace", createdAt: now });
+    let user = data.users.find((u) => u.email === email);
+    if (user) {
+      user.passwordHash = passwordHash;
+      user.sessionVersion += 1;
+      if (input.name.trim()) user.name = input.name.trim();
+      data.memberships = data.memberships.filter((m) => !(m.userId === user!.id && m.workspaceId === workspaceId));
+    } else {
+      user = { id: newId("usr"), email, name: input.name.trim(), passwordHash, sessionVersion: 1, createdAt: now };
+      data.users.push(user);
+    }
     data.memberships.push({ workspaceId, userId: user.id, role: "owner" });
     return user;
   });
@@ -126,8 +173,9 @@ export async function setupFirstAccount(input: { setupCode: string; email: strin
 export async function login(emailInput: string, password: string): Promise<User | null> {
   const email = normalizeEmail(emailInput);
   const user = (await read()).users.find((u) => u.email === email);
-  // Hash even when the user doesn't exist so timing doesn't reveal which emails have accounts.
-  const ok = await verifyPassword(password, user?.passwordHash ?? "scrypt$16384$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+  // Hash even when the user doesn't exist (or has no password, after a restore) so timing doesn't
+  // reveal which emails have accounts.
+  const ok = await verifyPassword(password, user?.passwordHash || `scrypt$${N}$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`);
   return user && ok ? user : null;
 }
 
@@ -161,11 +209,18 @@ export function findInvite(data: StoreData, token: string): Invite | null {
 export async function signupWithInvite(input: { token: string; email: string; name: string; password: string }): Promise<User> {
   const email = normalizeEmail(input.email);
   validate(email, input.password, input.name);
-  const passwordHash = await hashPassword(input.password);
-  return mutate((data) => {
+  const check = (data: StoreData): Invite => {
     const invite = findInvite(data, input.token);
     if (!invite) throw new AccountError("This invite link has expired or was already used. Ask for a new one.", 410);
     if (data.users.some((u) => u.email === email)) throw new AccountError("An account with that email already exists. Sign in instead.", 409);
+    return invite;
+  };
+  // Check the invite before hashing: scrypt is deliberately expensive, so a made-up token must not
+  // cost the server a hash. Checked again inside mutate in case the invite was used meanwhile.
+  check(await read());
+  const passwordHash = await hashPassword(input.password);
+  return mutate((data) => {
+    const invite = check(data);
     const user: User = { id: newId("usr"), email, name: input.name.trim(), passwordHash, sessionVersion: 1, createdAt: new Date().toISOString() };
     data.users.push(user);
     data.memberships.push({ workspaceId: invite.workspaceId, userId: user.id, role: invite.role });
@@ -191,6 +246,23 @@ export async function signOutEverywhere(ctx: Context): Promise<void> {
   await mutate((data) => {
     const user = data.users.find((u) => u.id === ctx.user.id);
     if (user) user.sessionVersion += 1;
+  });
+}
+
+/**
+ * A team member deletes their own account: the user, their memberships and their unused invites go.
+ * The last owner of a workspace can't, so a workspace is never left without someone in charge.
+ */
+export async function deleteOwnAccount(ctx: Context, password: string): Promise<void> {
+  if (!(await verifyPassword(password, ctx.user.passwordHash))) throw new AccountError("Your password didn't match.", 403);
+  await mutate((data) => {
+    for (const m of data.memberships.filter((x) => x.userId === ctx.user.id && x.role === "owner")) {
+      const owners = data.memberships.filter((x) => x.workspaceId === m.workspaceId && x.role === "owner");
+      if (owners.length <= 1) throw new AccountError("You're the only owner. Make someone else an owner (invite them as one) before deleting your account.", 409);
+    }
+    data.memberships = data.memberships.filter((m) => m.userId !== ctx.user.id);
+    data.users = data.users.filter((u) => u.id !== ctx.user.id);
+    data.invites = data.invites.filter((i) => !(i.createdBy === ctx.user.id && !i.usedAt));
   });
 }
 

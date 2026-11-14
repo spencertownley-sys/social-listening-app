@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { BackupFile, BackupStatus } from "@/lib/backup";
 import type { Role } from "@/lib/store";
+import { NETWORKS, NETWORK_LABELS, type Network } from "@/lib/types";
 
 interface Props {
   me: { id: string; name: string; email: string; role: Role };
@@ -13,7 +14,7 @@ interface Props {
   canInvite: boolean;
   storage: "file" | "postgres";
   /** Only for owners of the site's main workspace. */
-  backups: { files: BackupFile[]; status: BackupStatus; emailReady: boolean; to: string } | null;
+  backups: { files: BackupFile[]; status: BackupStatus; emailReady: boolean; encrypted: boolean; to: string } | null;
 }
 
 function size(n: number): string {
@@ -38,12 +39,14 @@ export function AccountPanel({ me, workspaceName, members, invites, canInvite, s
   const [link, setLink] = useState<string | null>(null);
   const [role, setRole] = useState<Role>("editor");
   const [pw, setPw] = useState({ current: "", next: "" });
+  const [forget, setForget] = useState<{ network: Network; handle: string }>({ network: "bluesky", handle: "" });
+  const [deletePw, setDeletePw] = useState("");
 
-  async function run(fn: () => Promise<unknown>, ok: string) {
+  async function run<T>(fn: () => Promise<T>, ok: string | ((result: T) => string)) {
     setMsg(null);
     try {
-      await fn();
-      setMsg(ok);
+      const result = await fn();
+      setMsg(typeof ok === "function" ? ok(result) : ok);
       router.refresh();
     } catch (e) {
       setMsg((e as Error).message);
@@ -169,6 +172,83 @@ export function AccountPanel({ me, workspaceName, members, invites, canInvite, s
         </button>
       </section>
 
+      <section className="card space-y-3 text-sm">
+        <h2 className="font-semibold">Delete my account</h2>
+        <p className="text-muted">
+          Removes your account and your place in every workspace. Profiles and posts stay with the workspace. The last owner of a workspace
+          can&apos;t delete their account until someone else is an owner.
+        </p>
+        <form
+          className="flex flex-wrap gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!confirm("Delete your account? This can't be undone.")) return;
+            run(async () => {
+              await post("/api/account", "POST", { action: "delete", password: deletePw });
+              router.push("/login");
+            }, "Your account was deleted.");
+          }}
+        >
+          <input
+            className="input w-auto"
+            type="password"
+            placeholder="Your password"
+            autoComplete="current-password"
+            value={deletePw}
+            onChange={(e) => setDeletePw(e.target.value)}
+            required
+            aria-label="Your password, to confirm"
+          />
+          <button className="btn text-danger" type="submit">
+            Delete my account
+          </button>
+        </form>
+      </section>
+
+      {backups && (
+        <section className="card space-y-3 text-sm">
+          <h2 className="font-semibold">Erase a post author&apos;s data</h2>
+          <p className="text-muted">
+            For an erasure request: removes every stored post by this handle on this network, with its labels, matches and alert lines,
+            and takes the handle off every muted list. Their new public posts can be collected again if they match a profile.
+          </p>
+          <form
+            className="flex flex-wrap gap-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!confirm(`Erase everything stored about ${forget.handle} on ${NETWORK_LABELS[forget.network]}?`)) return;
+              run(
+                async () => {
+                  const r = (await post("/api/authors/forget", "POST", forget)) as { posts: number; mutes: number };
+                  setForget({ ...forget, handle: "" });
+                  return r;
+                },
+                (r) => `Erased ${r.posts} post${r.posts === 1 ? "" : "s"} and ${r.mutes} muted entr${r.mutes === 1 ? "y" : "ies"}.`,
+              );
+            }}
+          >
+            <select className="input w-auto" value={forget.network} onChange={(e) => setForget({ ...forget, network: e.target.value as Network })} aria-label="Network">
+              {NETWORKS.map((n) => (
+                <option key={n} value={n}>
+                  {NETWORK_LABELS[n]}
+                </option>
+              ))}
+            </select>
+            <input
+              className="input w-auto"
+              placeholder="Handle, e.g. someone.bsky.social"
+              value={forget.handle}
+              onChange={(e) => setForget({ ...forget, handle: e.target.value })}
+              required
+              aria-label="Author handle"
+            />
+            <button className="btn text-danger" type="submit">
+              Erase
+            </button>
+          </form>
+        </section>
+      )}
+
       {me.role === "owner" && (
         <section className="card space-y-2 text-sm">
           <h2 className="font-semibold">Your data</h2>
@@ -182,8 +262,12 @@ export function AccountPanel({ me, workspaceName, members, invites, canInvite, s
             <div className="space-y-2 pt-2">
               <h3 className="font-semibold">Nightly backups</h3>
               <p className="text-muted">
-                A full backup is saved on the server every night (the last 7 are kept)
-                {backups.emailReady ? ` and emailed to ${backups.to}.` : ". Add RESEND_API_KEY in Railway to also get each one by email."}
+                A full backup is saved on the server every night (the last 7 are kept); download it here.
+                {backups.emailReady
+                  ? backups.encrypted
+                    ? ` A notice goes to ${backups.to} with an encrypted copy attached (password hashes left out).`
+                    : ` A notice goes to ${backups.to}. Set BACKUP_ENCRYPTION_KEY in Railway to also attach an encrypted copy.`
+                  : " Add RESEND_API_KEY in Railway to get a notice by email."}
               </p>
               {backups.status.lastError && <p className="text-danger" role="alert">Last backup failed: {backups.status.lastError}</p>}
               {backups.status.lastResult && !backups.status.lastResult.emailed && backups.emailReady && (

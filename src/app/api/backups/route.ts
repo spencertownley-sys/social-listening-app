@@ -22,6 +22,7 @@ export async function POST() {
   try {
     return NextResponse.json(await runBackup(), { status: 201 });
   } catch (e) {
-    return NextResponse.json({ error: `Backup failed: ${(e as Error).message}` }, { status: 500 });
+    console.error(e);
+    return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
   }
 }

@@ -3,10 +3,27 @@ import { SESSION_COOKIE, verifySession } from "./lib/auth";
 
 /**
  * First gate: every page and API route needs a validly signed, unexpired session cookie, except
- * the sign-in/setup/sign-up pages and the health and cron endpoints. Pages and routes then check
+ * the sign-in/setup/sign-up pages, the public policy pages and the health and cron endpoints. Pages and routes then check
  * the session against the user's current account (accounts.ts).
  */
-const PUBLIC = ["/login", "/setup", "/signup", "/api/login", "/api/setup", "/api/signup", "/api/health", "/api/cron"];
+const PUBLIC = [
+  "/login",
+  "/setup",
+  "/signup",
+  "/api/login",
+  "/api/setup",
+  "/api/signup",
+  "/api/health",
+  "/api/cron",
+  // Policies must be readable before signing in, and the cookie notice loads on the sign-in pages.
+  "/privacy",
+  "/cookies",
+  "/terms",
+  "/cookie-banner.js",
+  "/cookie-banner.css",
+  "/robots.txt",
+  "/.well-known/security.txt",
+];
 
 export async function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;

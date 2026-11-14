@@ -149,6 +149,27 @@ export function applyRetention(data: StoreData): void {
   data.invites = data.invites.filter((i) => Date.parse(i.expiresAt) > now - 30 * 86_400_000);
 }
 
+/**
+ * Remove posts and everything derived from them (labels, matches, feedback, notification links).
+ * Used when a platform signals a deletion, for erasure requests, and to clear the demo posts.
+ */
+export function removePosts(data: StoreData, ids: Iterable<string>): number {
+  const gone = new Set<string>();
+  for (const id of ids) {
+    if (!data.posts[id]) continue;
+    gone.add(id);
+    delete data.posts[id];
+    delete data.enrichments[id];
+  }
+  if (gone.size === 0) return 0;
+  for (const [k, m] of Object.entries(data.matches)) if (gone.has(m.postId)) delete data.matches[k];
+  data.feedback = data.feedback.filter((f) => !gone.has(f.postId));
+  for (const l of Object.values(data.learning)) for (const id of gone) delete l.sentimentOverrides?.[id];
+  for (const n of data.notifications) n.postIds = n.postIds.filter((id) => !gone.has(id));
+  data.notifications = data.notifications.filter((n) => n.postIds.length > 0 || n.kind !== "realtime");
+  return gone.size;
+}
+
 export interface Backend {
   name: "file" | "postgres";
   load(): Promise<StoreData>;
@@ -238,7 +259,8 @@ export function getLearning(data: StoreData, profileId: string): LearningState {
 }
 
 export function newId(prefix: string): string {
-  return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  // Time prefix keeps ids roughly sortable; the random part comes from a CSPRNG so ids can't be guessed.
+  return `${prefix}_${Date.now().toString(36)}${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
 }
 
 /** For tests. */

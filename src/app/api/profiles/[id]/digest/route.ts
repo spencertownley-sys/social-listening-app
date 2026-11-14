@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { feedFor } from "@/lib/analytics";
 import { buildDigest, sendDigestEmail } from "@/lib/digest";
 import { canSeeProfile } from "@/lib/accounts";
-import { apiContext } from "@/lib/http";
+import { apiContext, paidLimit } from "@/lib/http";
 import { read } from "@/lib/store";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -10,6 +10,11 @@ type Ctx = { params: Promise<{ id: string }> };
 async function digestFor(id: string, need: "read" | "write") {
   const ctx = await apiContext(need);
   if (ctx instanceof NextResponse) return ctx;
+  // Sending calls Resend (and counts against its quota); previewing is free.
+  if (need === "write") {
+    const limited = paidLimit("digest", ctx);
+    if (limited) return limited;
+  }
   const data = await read();
   if (!canSeeProfile(data, ctx, id)) return null;
   const profile = data.profiles.find((p) => p.id === id);
@@ -21,7 +26,13 @@ export async function GET(_req: Request, { params }: Ctx) {
   const digest = await digestFor((await params).id, "read");
   if (digest instanceof NextResponse) return digest;
   if (!digest) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return new NextResponse(digest.html, { headers: { "content-type": "text/html; charset=utf-8" } });
+  // The digest quotes text and links from posts: render it with no scripts and in a sandbox.
+  return new NextResponse(digest.html, {
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "content-security-policy": "default-src 'none'; img-src https: data:; style-src 'unsafe-inline'; sandbox",
+    },
+  });
 }
 
 /** Send the digest now. */

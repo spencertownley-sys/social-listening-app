@@ -63,7 +63,9 @@ new site, open `/setup` to create the first account; on the hosted site this ask
 code, which is the value of `APP_PASSWORD`. The first account owns the existing workspace and
 its data. Invite others from **Account**: each invite link works once, for 7 days, and gives
 the role you picked (viewers can read but not change anything). Sessions are signed with
-`AUTH_SECRET`; changing it signs everyone out.
+`AUTH_SECRET`, which is **required in production**: set it to at least 32 random characters
+(`openssl rand -base64 48`), different from `APP_PASSWORD`. Without it sign-in fails. Changing it
+signs everyone out.
 
 Without `DATABASE_URL`, data is stored in `.data/earshot.json` (git-ignored), or in
 `EARSHOT_DATA_FILE`. The first time the server starts against an empty database it imports that
@@ -71,12 +73,25 @@ file, so moving from the file to Postgres needs no manual step.
 
 **Backups.** Railway's Hobby plan can't create database backups, so Earshot makes its own: every
 night (08:00 UTC) it saves the whole dataset as a `.json.gz` file in `/data/backups` (the last 7
-are kept) and, when `RESEND_API_KEY` is set, emails it to the site's owners (or `BACKUP_TO`).
-Owners can also download backups or make one from **Account**. To restore, start Earshot against
-an empty database with `EARSHOT_DATA_FILE` pointing at the backup file: it is imported on first
-start.
+are kept). Owners can download backups or make one from **Account**. When `RESEND_API_KEY` is set,
+a notice is emailed to the site's owners (or `BACKUP_TO`). The email carries a copy only when
+`BACKUP_ENCRYPTION_KEY` is set (32 random bytes, base64: `openssl rand -base64 32`): that copy
+leaves out password hashes and is encrypted with AES-256-GCM, named `….json.gz.enc`. Keep the key
+somewhere other than the mailbox.
+
+To restore, start Earshot against an empty database with `EARSHOT_DATA_FILE` pointing at the
+backup file: it is imported on first start.
+
+- A file downloaded from **Account** (or taken from `/data/backups`) restores as it is, passwords
+  included.
+- An emailed copy must be decrypted first:
+  `BACKUP_ENCRYPTION_KEY=<key> node scripts/decrypt-backup.mjs earshot-<date>.json.gz.enc`
+  writes `earshot-<date>.json.gz` next to it. Because it has no password hashes, nobody can sign in
+  after the import, so `/setup` opens again: enter the setup code (`APP_PASSWORD`) with an owner's
+  email to set a new password for that account. Other members can't sign in until an owner removes
+  them on **Account** and sends them a new invite.
 
 ## Configuration
 
-See [.env.example](.env.example). Nothing is required; without `ANTHROPIC_API_KEY` the app uses
-its offline classifier and drafting heuristics.
+See [.env.example](.env.example). Locally nothing is required; in production `AUTH_SECRET` is.
+Without `ANTHROPIC_API_KEY` the app uses its offline classifier and drafting heuristics.

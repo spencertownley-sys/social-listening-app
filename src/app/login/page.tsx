@@ -14,7 +14,9 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <input type="hidden" name="next" value={next} />
         <Field label="Email" type="email" name="email" autoComplete="email" required autoFocus />
         <Field label="Password" type="password" name="password" autoComplete="current-password" required />
-        <FormError message={error ? "That email and password didn't match." : undefined} />
+        <FormError
+          message={error === "limit" ? "Too many sign-in attempts. Wait 15 minutes and try again." : error ? "That email and password didn't match." : undefined}
+        />
         <button className="btn-primary w-full justify-center" type="submit">
           Sign in
         </button>

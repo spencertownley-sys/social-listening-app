@@ -1,6 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { gzipSync } from "zlib";
+import { backupKey, encryptBackup } from "./backup-crypto";
 import { sendEmail } from "./digest";
 import type { Context } from "./accounts";
 import { DATA_FILE, DEFAULT_WORKSPACE_ID, read, type StoreData } from "./store";
@@ -9,10 +10,16 @@ import { DATA_FILE, DEFAULT_WORKSPACE_ID, read, type StoreData } from "./store";
  * Nightly backups, for hosts without database backups (Railway's Hobby plan).
  *
  * Each backup is the whole dataset as gzipped JSON. It is saved on the server (BACKUP_DIR,
- * default next to the data file, so /data/backups on Railway; the newest BACKUP_KEEP are kept)
- * and emailed through Resend to BACKUP_TO, or to the workspace owners. To restore, point
- * EARSHOT_DATA_FILE at a backup file and start against an empty database: it is imported on the
- * first start like any data file.
+ * default next to the data file, so /data/backups on Railway; the newest BACKUP_KEEP are kept),
+ * where owners can download it from the Account page. A notice goes by email through Resend to
+ * BACKUP_TO, or to the workspace owners. Only when BACKUP_ENCRYPTION_KEY is set does the email
+ * carry a copy, and that copy has no password hashes and is encrypted (AES-256-GCM, .json.gz.enc;
+ * see backup-crypto.ts), so mailboxes and the mail provider never hold readable data.
+ *
+ * To restore, point EARSHOT_DATA_FILE at a backup file (decrypt an emailed copy first with
+ * scripts/decrypt-backup.mjs) and start against an empty database: it is imported on the first
+ * start like any data file. After restoring an emailed copy, nobody has a password yet, so /setup
+ * opens again and lets an owner set theirs (accounts.ts).
  */
 
 export const BACKUP_DIR = process.env.BACKUP_DIR ?? path.join(path.dirname(DATA_FILE), "backups");
@@ -31,6 +38,8 @@ export interface BackupFile {
 export interface BackupResult {
   file: BackupFile;
   emailed: boolean;
+  /** Whether the email carried the encrypted copy (only with BACKUP_ENCRYPTION_KEY). */
+  attached?: boolean;
   emailNote?: string;
 }
 
@@ -78,7 +87,7 @@ export function canManageBackups(ctx: Context): boolean {
   return ctx.memberships.some((m) => m.workspaceId === DEFAULT_WORKSPACE_ID && m.role === "owner");
 }
 
-/** Who gets the backup email: BACKUP_TO, otherwise the owners of the main workspace. */
+/** Who gets the backup email: BACKUP_TO, otherwise the owners of the main workspace (never DIGEST_TO). */
 export function backupRecipients(data: StoreData): string[] {
   const configured = (process.env.BACKUP_TO ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   if (configured.length) return configured;
@@ -92,6 +101,11 @@ export function formatBytes(n: number): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
+/** The dataset as it goes into an emailed copy: everything except password hashes. */
+export function withoutPasswordHashes(data: StoreData): StoreData {
+  return { ...data, users: data.users.map((u) => ({ ...u, passwordHash: "" })) };
+}
+
 async function create(now: Date): Promise<BackupResult> {
   const data = await read();
   const gz = gzipSync(JSON.stringify(data));
@@ -103,15 +117,31 @@ async function create(now: Date): Promise<BackupResult> {
   for (const old of (await listBackups()).slice(KEEP)) await fs.rm(path.join(BACKUP_DIR, old.name), { force: true });
   const file: BackupFile = { name, size: gz.length, createdAt: now.toISOString() };
 
+  // The emailed copy never contains password hashes and is only attached when it can be encrypted.
+  let key: Buffer | null = null;
+  let keyProblem: string | undefined;
+  try {
+    key = backupKey();
+  } catch (e) {
+    keyProblem = (e as Error).message;
+  }
+  const sealed = key ? encryptBackup(gzipSync(JSON.stringify(withoutPasswordHashes(data))), key) : null;
+  const attach = sealed !== null && sealed.length <= MAX_ATTACHMENT_BYTES;
+
+  // Never fall back to DIGEST_TO: digest readers are not necessarily trusted with a backup.
+  const to = backupRecipients(data);
+  if (to.length === 0) return { file, emailed: false, attached: false, emailNote: "No backup recipient: set BACKUP_TO or add an owner." };
+
   const posts = Object.keys(data.posts).length;
   const summary = `${data.profiles.length} profiles, ${posts} posts, ${Object.keys(data.matches).length} matches, ${data.users.length} users`;
-  const restore = "To restore, send this file to whoever runs Earshot (it can be imported into an empty database as-is).";
-  const tooBig = gz.length > MAX_ATTACHMENT_BYTES;
   const text = [
     `Earshot backup from ${now.toUTCString()}: ${summary}, ${formatBytes(gz.length)} compressed.`,
-    tooBig ? "The file is too large to attach. Download it from the Account page." : "The backup is attached.",
-    restore,
-    "It contains your account list (with hashed passwords), so keep it somewhere private.",
+    "The full backup is saved on the server. Owners can download it from the Account page.",
+    attach
+      ? `An encrypted copy without password hashes is attached (${name}.enc). To restore it, decrypt it with BACKUP_ENCRYPTION_KEY using scripts/decrypt-backup.mjs; see the README.`
+      : sealed
+        ? "The encrypted copy is too large to attach."
+        : "No copy is attached because BACKUP_ENCRYPTION_KEY is not set.",
   ].join("\n\n");
   const email = await sendEmail(
     `Earshot backup ${now.toISOString().slice(0, 10)}`,
@@ -121,11 +151,12 @@ async function create(now: Date): Promise<BackupResult> {
       .join(""),
     text,
     {
-      to: backupRecipients(data),
-      attachments: tooBig ? [] : [{ filename: name, content: gz.toString("base64") }],
+      to,
+      attachments: attach ? [{ filename: `${name}.enc`, content: sealed.toString("base64") }] : [],
     },
   );
-  return { file, emailed: email.sent, emailNote: email.reason };
+  const notes = [email.reason, keyProblem].filter(Boolean).join(" ");
+  return { file, emailed: email.sent, attached: email.sent && attach, emailNote: notes || undefined };
 }
 
 /** Make a backup now (never two at once). */
