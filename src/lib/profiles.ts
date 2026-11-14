@@ -1,6 +1,7 @@
 import { applyFeedback } from "./learning";
 import { rematchProfile } from "./pipeline";
 import { parseProfileConfig, type ListeningProfile } from "./profile";
+import { UserError } from "./errors";
 import { getLearning, mutate, newId } from "./store";
 import type { Feedback, FeedbackAction, Sentiment } from "./types";
 
@@ -35,7 +36,7 @@ export async function updateProfile(
     let config = profile.config;
     if (patch.rollbackTo !== undefined) {
       const v = data.versions.find((x) => x.profileId === id && x.version === patch.rollbackTo);
-      if (!v) throw new Error(`Version ${patch.rollbackTo} not found`);
+      if (!v) throw new UserError(`Version ${patch.rollbackTo} not found`, 404);
       config = v.config;
     } else if (patch.config !== undefined) {
       config = parseProfileConfig(patch.config);
@@ -74,10 +75,10 @@ export async function recordFeedback(input: {
 }): Promise<Feedback> {
   return mutate((data) => {
     const profile = data.profiles.find((p) => p.id === input.profileId);
-    if (!profile) throw new Error("Profile not found");
+    if (!profile) throw new UserError("Profile not found", 404);
     const post = data.posts[input.postId];
-    if (!post) throw new Error("Post not found");
-    if (input.action === "wrong_sentiment" && !input.correctedSentiment) throw new Error("Say which sentiment is right.");
+    if (!post) throw new UserError("Post not found", 404);
+    if (input.action === "wrong_sentiment" && !input.correctedSentiment) throw new UserError("Say which sentiment is right.");
     const feedback: Feedback = { id: newId("fb"), ...input, createdAt: new Date().toISOString() };
     data.feedback.push(feedback);
     data.learning[profile.id] = applyFeedback(getLearning(data, profile.id), feedback, post);

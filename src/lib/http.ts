@@ -2,9 +2,14 @@ import { redirect } from "next/navigation";
 import { AccountError, canWrite, currentContext, type Context } from "./accounts";
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
+import { UserError } from "./errors";
 import { QuerySyntaxError } from "./query";
 
-/** Turn thrown errors into JSON responses: validation problems are 400s, everything else 500. */
+/**
+ * Turn thrown errors into JSON responses: validation problems and UserErrors keep their message;
+ * everything else is logged and answered with a generic 500, so database, file system or
+ * third-party error text never reaches the browser.
+ */
 export function errorResponse(error: unknown): NextResponse {
   if (error instanceof ZodError) {
     return NextResponse.json(
@@ -15,8 +20,9 @@ export function errorResponse(error: unknown): NextResponse {
   if (error instanceof QuerySyntaxError) {
     return NextResponse.json({ error: `Query: ${error.message} (at character ${error.position + 1})` }, { status: 400 });
   }
+  if (error instanceof UserError) return NextResponse.json({ error: error.message }, { status: error.status });
   console.error(error);
-  return NextResponse.json({ error: (error as Error).message ?? "Something went wrong" }, { status: 500 });
+  return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
 }
 
 export async function jsonBody(req: Request): Promise<Record<string, unknown>> {
