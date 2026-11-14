@@ -16,11 +16,20 @@ export interface SessionPayload {
   e: number;
 }
 
-function secret(): string {
-  const s = process.env.AUTH_SECRET || process.env.APP_PASSWORD;
-  if (s) return s;
-  if (process.env.NODE_ENV === "production") throw new Error("Set AUTH_SECRET to sign sessions.");
-  return "earshot-dev-only-secret";
+const MIN_SECRET_LENGTH = 32;
+
+/**
+ * The session signing key: AUTH_SECRET only. It never falls back to APP_PASSWORD, because anyone
+ * who learned the setup code could then forge sessions. In production it must be set and at least
+ * 32 characters; local development uses a fixed key so no setup is needed. Exported for tests.
+ */
+export function sessionSecret(): string {
+  const s = process.env.AUTH_SECRET;
+  if (process.env.NODE_ENV === "production") {
+    if (!s || s.length < MIN_SECRET_LENGTH) throw new Error(`Set AUTH_SECRET (at least ${MIN_SECRET_LENGTH} random characters) to sign sessions.`);
+    return s;
+  }
+  return s || "earshot-dev-only-secret";
 }
 
 const enc = new TextEncoder();
@@ -53,14 +62,14 @@ export function safeEqual(a: string, b: string): boolean {
 
 export async function signSession(userId: string, sessionVersion: number, now = Date.now()): Promise<string> {
   const payload = b64urlEncode(JSON.stringify({ u: userId, v: sessionVersion, e: now + SESSION_MAX_AGE * 1000 } satisfies SessionPayload));
-  return `${payload}.${await hmac(secret(), payload)}`;
+  return `${payload}.${await hmac(sessionSecret(), payload)}`;
 }
 
 export async function verifySession(token: string | undefined, now = Date.now()): Promise<SessionPayload | null> {
   if (!token) return null;
   const [payload, sig] = token.split(".");
   if (!payload || !sig) return null;
-  if (!safeEqual(sig, await hmac(secret(), payload))) return null;
+  if (!safeEqual(sig, await hmac(sessionSecret(), payload))) return null;
   try {
     const p = JSON.parse(b64urlDecode(payload)) as SessionPayload;
     if (typeof p.u !== "string" || typeof p.v !== "number" || typeof p.e !== "number" || p.e < now) return null;

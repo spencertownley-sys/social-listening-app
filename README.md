@@ -63,7 +63,9 @@ new site, open `/setup` to create the first account; on the hosted site this ask
 code, which is the value of `APP_PASSWORD`. The first account owns the existing workspace and
 its data. Invite others from **Account**: each invite link works once, for 7 days, and gives
 the role you picked (viewers can read but not change anything). Sessions are signed with
-`AUTH_SECRET`; changing it signs everyone out.
+`AUTH_SECRET`, which is **required in production**: set it to at least 32 random characters
+(`openssl rand -base64 48`), different from `APP_PASSWORD`. Without it sign-in fails. Changing it
+signs everyone out.
 
 Without `DATABASE_URL`, data is stored in `.data/earshot.json` (git-ignored), or in
 `EARSHOT_DATA_FILE`. The first time the server starts against an empty database it imports that
@@ -78,5 +80,5 @@ start.
 
 ## Configuration
 
-See [.env.example](.env.example). Nothing is required; without `ANTHROPIC_API_KEY` the app uses
-its offline classifier and drafting heuristics.
+See [.env.example](.env.example). Locally nothing is required; in production `AUTH_SECRET` is.
+Without `ANTHROPIC_API_KEY` the app uses its offline classifier and drafting heuristics.
