@@ -11,10 +11,25 @@ export function seeOther(path: string): NextResponse {
   return new NextResponse(null, { status: 303, headers: { location: path } });
 }
 
-/** Only same-origin paths. */
+const LOCAL = "http://local.invalid";
+
+/**
+ * Only same-origin paths. Parsed the way browsers parse a Location header (WHATWG URL), which
+ * strips tabs and newlines and treats backslashes as slashes, so tricks like "/\t/evil.com" can't
+ * turn into "//evil.com".
+ */
 export function safeNext(raw: unknown): string {
-  const s = typeof raw === "string" ? raw : "/";
-  return s.startsWith("/") && !s.startsWith("//") && !s.startsWith("/\\") ? s : "/";
+  if (typeof raw !== "string" || !raw.startsWith("/")) return "/";
+  let u: URL;
+  try {
+    u = new URL(raw, LOCAL);
+  } catch {
+    return "/";
+  }
+  if (u.origin !== LOCAL) return "/";
+  const path = u.pathname + u.search + u.hash;
+  // Dot segments can collapse to a protocol-relative path ("/a/..//evil.com" -> "//evil.com").
+  return path.startsWith("//") || path.startsWith("/\\") ? "/" : path;
 }
 
 export async function signedIn(user: User, next: string): Promise<NextResponse> {
