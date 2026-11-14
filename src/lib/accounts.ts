@@ -102,25 +102,44 @@ export async function sessionCookieFor(user: User): Promise<{ name: string; valu
 // ---------------------------------------------------------------------------------------------
 // Flows
 
-export async function needsSetup(): Promise<boolean> {
-  return (await read()).users.length === 0;
+/** True while nobody can sign in: a new site, or one restored from an emailed backup (no password hashes). */
+export function isUnclaimed(data: StoreData): boolean {
+  return !data.users.some((u) => u.passwordHash);
 }
 
-/** Create the first account; it owns the pre-existing workspace and its data. */
+export async function needsSetup(): Promise<boolean> {
+  return isUnclaimed(await read());
+}
+
+/**
+ * Create the first account; it owns the pre-existing workspace and its data. On a site restored
+ * from an emailed backup (accounts kept, password hashes stripped), an existing account with the
+ * same email gets this password instead and becomes an owner.
+ */
 export async function setupFirstAccount(input: { setupCode: string; email: string; name: string; password: string }): Promise<User> {
   // Refuse before looking at the code once the site is claimed, so the endpoint can't be used to
   // test guesses of the code (a wrong code and a right one now get the same answer).
-  if ((await read()).users.length > 0) throw new AccountError("This site already has an account. Sign in instead.", 409);
+  const claimed = () => new AccountError("This site already has an account. Sign in instead.", 409);
+  if (!isUnclaimed(await read())) throw claimed();
   const email = normalizeEmail(input.email);
   validate(email, input.password, input.name);
   if (!(await checkSetupCode(input.setupCode))) throw new AccountError("That setup code didn't match.", 403);
   const passwordHash = await hashPassword(input.password);
   return mutate((data) => {
-    if (data.users.length > 0) throw new AccountError("This site already has an account. Sign in instead.", 409);
-    const user: User = { id: newId("usr"), email, name: input.name.trim(), passwordHash, sessionVersion: 1, createdAt: new Date().toISOString() };
-    data.users.push(user);
+    if (!isUnclaimed(data)) throw claimed();
     const workspaceId = data.workspaces[0]?.id ?? DEFAULT_WORKSPACE_ID;
-    if (!data.workspaces.some((w) => w.id === workspaceId)) data.workspaces.push({ id: workspaceId, name: "My workspace", createdAt: user.createdAt });
+    const now = new Date().toISOString();
+    if (!data.workspaces.some((w) => w.id === workspaceId)) data.workspaces.push({ id: workspaceId, name: "My workspace", createdAt: now });
+    let user = data.users.find((u) => u.email === email);
+    if (user) {
+      user.passwordHash = passwordHash;
+      user.sessionVersion += 1;
+      if (input.name.trim()) user.name = input.name.trim();
+      data.memberships = data.memberships.filter((m) => !(m.userId === user!.id && m.workspaceId === workspaceId));
+    } else {
+      user = { id: newId("usr"), email, name: input.name.trim(), passwordHash, sessionVersion: 1, createdAt: now };
+      data.users.push(user);
+    }
     data.memberships.push({ workspaceId, userId: user.id, role: "owner" });
     return user;
   });

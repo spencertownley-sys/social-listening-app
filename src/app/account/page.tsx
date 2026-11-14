@@ -27,7 +27,13 @@ export default async function AccountPage() {
       storage={await storageBackendName()}
       backups={
         canManageBackups(ctx)
-          ? { files: await listBackups(), status: backupStatus(), emailReady: Boolean(process.env.RESEND_API_KEY), to: process.env.BACKUP_TO || ctx.user.email }
+          ? {
+              files: await listBackups(),
+              status: backupStatus(),
+              emailReady: Boolean(process.env.RESEND_API_KEY),
+              encrypted: Boolean(process.env.BACKUP_ENCRYPTION_KEY),
+              to: process.env.BACKUP_TO || ctx.user.email,
+            }
           : null
       }
     />

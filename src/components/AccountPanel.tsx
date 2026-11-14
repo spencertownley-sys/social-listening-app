@@ -13,7 +13,7 @@ interface Props {
   canInvite: boolean;
   storage: "file" | "postgres";
   /** Only for owners of the site's main workspace. */
-  backups: { files: BackupFile[]; status: BackupStatus; emailReady: boolean; to: string } | null;
+  backups: { files: BackupFile[]; status: BackupStatus; emailReady: boolean; encrypted: boolean; to: string } | null;
 }
 
 function size(n: number): string {
@@ -182,8 +182,12 @@ export function AccountPanel({ me, workspaceName, members, invites, canInvite, s
             <div className="space-y-2 pt-2">
               <h3 className="font-semibold">Nightly backups</h3>
               <p className="text-muted">
-                A full backup is saved on the server every night (the last 7 are kept)
-                {backups.emailReady ? ` and emailed to ${backups.to}.` : ". Add RESEND_API_KEY in Railway to also get each one by email."}
+                A full backup is saved on the server every night (the last 7 are kept); download it here.
+                {backups.emailReady
+                  ? backups.encrypted
+                    ? ` A notice goes to ${backups.to} with an encrypted copy attached (password hashes left out).`
+                    : ` A notice goes to ${backups.to}. Set BACKUP_ENCRYPTION_KEY in Railway to also attach an encrypted copy.`
+                  : " Add RESEND_API_KEY in Railway to get a notice by email."}
               </p>
               {backups.status.lastError && <p className="text-danger" role="alert">Last backup failed: {backups.status.lastError}</p>}
               {backups.status.lastResult && !backups.status.lastResult.emailed && backups.emailReady && (
