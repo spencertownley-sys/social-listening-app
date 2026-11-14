@@ -2,13 +2,22 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { forgetAuthor } from "../forget";
 import { parseProfileConfig } from "../profile";
-import { emptyData } from "../store";
 import type { Post } from "../types";
 
+// The store reads EARSHOT_DATA_FILE when it loads, so point it at a temp file before importing it.
 process.env.EARSHOT_DATA_FILE = path.join(mkdtempSync(path.join(tmpdir(), "earshot-erasure-")), "store.json");
 delete process.env.DATABASE_URL;
+
+let store: typeof import("../store");
+let a: typeof import("../accounts");
+let forgetAuthor: typeof import("../forget").forgetAuthor;
+
+beforeAll(async () => {
+  store = await import("../store");
+  a = await import("../accounts");
+  ({ forgetAuthor } = await import("../forget"));
+});
 
 function post(id: string, network: Post["network"], handle: string): Post {
   return {
@@ -29,7 +38,7 @@ function post(id: string, network: Post["network"], handle: string): Post {
 
 describe("forgetting a post author", () => {
   it("leaves no posts, labels, matches, alert lines or mutes for that handle", () => {
-    const data = emptyData();
+    const data = store.emptyData();
     data.posts.a = post("a", "bluesky", "Someone.bsky.social");
     data.posts.b = post("b", "bluesky", "someone.bsky.social");
     data.posts.c = post("c", "mastodon", "someone.bsky.social");
@@ -69,14 +78,6 @@ describe("forgetting a post author", () => {
 });
 
 describe("deleting your own account", () => {
-  let a: typeof import("../accounts");
-  let store: typeof import("../store");
-
-  beforeAll(async () => {
-    store = await import("../store");
-    a = await import("../accounts");
-  });
-
   beforeEach(async () => {
     const { rm } = await import("node:fs/promises");
     await rm(process.env.EARSHOT_DATA_FILE!, { force: true });
