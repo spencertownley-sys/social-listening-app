@@ -108,6 +108,9 @@ export async function needsSetup(): Promise<boolean> {
 
 /** Create the first account; it owns the pre-existing workspace and its data. */
 export async function setupFirstAccount(input: { setupCode: string; email: string; name: string; password: string }): Promise<User> {
+  // Refuse before looking at the code once the site is claimed, so the endpoint can't be used to
+  // test guesses of the code (a wrong code and a right one now get the same answer).
+  if ((await read()).users.length > 0) throw new AccountError("This site already has an account. Sign in instead.", 409);
   const email = normalizeEmail(input.email);
   validate(email, input.password, input.name);
   if (!(await checkSetupCode(input.setupCode))) throw new AccountError("That setup code didn't match.", 403);

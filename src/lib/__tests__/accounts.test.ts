@@ -44,6 +44,13 @@ describe("accounts", () => {
     await expect(a.setupFirstAccount({ ...owner, email: "two@example.com" })).rejects.toMatchObject({ status: 409 });
   });
 
+  it("refuses setup with 409 before checking the code once a user exists", async () => {
+    await a.setupFirstAccount(owner);
+    // A wrong code gets the same answer as the right one, so the endpoint is no oracle for the code.
+    await expect(a.setupFirstAccount({ ...owner, setupCode: "wrong", email: "x@example.com" })).rejects.toMatchObject({ status: 409 });
+    await expect(a.setupFirstAccount({ ...owner, email: "x@example.com" })).rejects.toMatchObject({ status: 409 });
+  });
+
   it("logs in with the right password only", async () => {
     await a.setupFirstAccount(owner);
     expect(await a.login("OWNER@example.com", "owner-password")).not.toBeNull();
