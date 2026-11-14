@@ -73,6 +73,9 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           <Link href="/cookies" className="hover:text-foreground">
             Cookies
           </Link>
+          <Link href="/terms" className="hover:text-foreground">
+            Terms
+          </Link>
           <button type="button" data-cookie-settings className="hover:text-foreground">
             Cookie settings
           </button>

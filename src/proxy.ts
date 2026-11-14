@@ -18,6 +18,7 @@ const PUBLIC = [
   // Policies must be readable before signing in, and the cookie notice loads on the sign-in pages.
   "/privacy",
   "/cookies",
+  "/terms",
   "/cookie-banner.js",
   "/cookie-banner.css",
   "/robots.txt",

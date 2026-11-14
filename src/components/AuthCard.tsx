@@ -9,13 +9,16 @@ export function AuthCard({ title, children, note }: { title: string; children: R
       </div>
       {note && <p className="text-center text-sm text-muted">{note}</p>}
       <p className="text-center text-xs text-muted">
-        How Earshot handles data:{" "}
         <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">
           Privacy
-        </Link>{" "}
-        and{" "}
+        </Link>
+        {" · "}
         <Link href="/cookies" className="underline underline-offset-2 hover:text-foreground">
           Cookies
+        </Link>
+        {" · "}
+        <Link href="/terms" className="underline underline-offset-2 hover:text-foreground">
+          Terms
         </Link>
       </p>
     </div>

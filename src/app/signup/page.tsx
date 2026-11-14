@@ -25,6 +25,13 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
         <Field label="Email" type="email" name="email" autoComplete="email" required />
         <Field label="Password (10+ characters)" type="password" name="password" autoComplete="new-password" minLength={10} required />
         <FormError message={error} />
+        <p className="text-xs text-muted">
+          By creating an account you agree to the{" "}
+          <Link href="/terms" className="underline underline-offset-2 hover:text-foreground">
+            terms of use
+          </Link>
+          .
+        </p>
         <button className="btn-primary w-full justify-center" type="submit">
           Create account
         </button>
