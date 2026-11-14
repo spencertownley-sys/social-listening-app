@@ -81,6 +81,20 @@ export function allowAuthAttempt(form: "login" | "signup", req: Request, email: 
   return ip.ok && mail.ok;
 }
 
+const HOUR = 60 * 60_000;
+
+/**
+ * Routes that spend money on paid APIs (X, Claude), counted per signed-in user per hour. Preview
+ * gets more room because tuning a profile means previewing it again and again, and it only labels
+ * posts that have no labels yet.
+ */
+export const paidLimits = {
+  ingest: rateLimiter("paid-ingest", { max: 10, windowMs: HOUR }),
+  assist: rateLimiter("paid-assist", { max: 10, windowMs: HOUR }),
+  preview: rateLimiter("paid-preview", { max: 30, windowMs: HOUR }),
+  digest: rateLimiter("paid-digest", { max: 10, windowMs: HOUR }),
+};
+
 /** For tests. */
 export function __resetRateLimits(): void {
   for (const b of all.values()) b.clear();

@@ -3,6 +3,7 @@ import { AccountError, canWrite, currentContext, type Context } from "./accounts
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { UserError } from "./errors";
+import { paidLimits } from "./rate-limit";
 import { QuerySyntaxError } from "./query";
 
 /**
@@ -59,4 +60,15 @@ export async function pageContext(): Promise<Context> {
 export function accountErrorResponse(e: unknown): NextResponse {
   if (e instanceof AccountError) return NextResponse.json({ error: e.message }, { status: e.status });
   return errorResponse(e);
+}
+
+/** Per-user hourly limit for routes that call paid APIs: null when allowed, else the 429 to return. */
+export function paidLimit(route: keyof typeof paidLimits, ctx: Context): NextResponse | null {
+  const r = paidLimits[route].hit(ctx.user.id);
+  if (r.ok) return null;
+  const minutes = Math.ceil(r.retryAfter / 60);
+  return NextResponse.json(
+    { error: `That's the limit for now. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.` },
+    { status: 429, headers: { "retry-after": String(r.retryAfter) } },
+  );
 }

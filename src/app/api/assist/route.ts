@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { draftProfile } from "@/lib/assist";
-import { apiContext, errorResponse, jsonBody } from "@/lib/http";
+import { apiContext, errorResponse, jsonBody, paidLimit } from "@/lib/http";
 
 export async function POST(req: Request) {
   const ctx = await apiContext("write");
   if (ctx instanceof NextResponse) return ctx;
+  const limited = paidLimit("assist", ctx);
+  if (limited) return limited;
   try {
     const body = await jsonBody(req);
     const description = typeof body.description === "string" ? body.description : "";

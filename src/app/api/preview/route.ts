@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
-import { apiContext, errorResponse, jsonBody } from "@/lib/http";
+import { apiContext, errorResponse, jsonBody, paidLimit } from "@/lib/http";
 import { previewProfile } from "@/lib/pipeline";
 import { parseProfileConfig } from "@/lib/profile";
 
 export async function POST(req: Request) {
   const ctx = await apiContext("write");
   if (ctx instanceof NextResponse) return ctx;
+  const limited = paidLimit("preview", ctx);
+  if (limited) return limited;
   try {
     const body = await jsonBody(req);
     const config = parseProfileConfig(body.config);

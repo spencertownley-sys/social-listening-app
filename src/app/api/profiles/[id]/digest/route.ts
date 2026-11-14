@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { feedFor } from "@/lib/analytics";
 import { buildDigest, sendDigestEmail } from "@/lib/digest";
 import { canSeeProfile } from "@/lib/accounts";
-import { apiContext } from "@/lib/http";
+import { apiContext, paidLimit } from "@/lib/http";
 import { read } from "@/lib/store";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -10,6 +10,11 @@ type Ctx = { params: Promise<{ id: string }> };
 async function digestFor(id: string, need: "read" | "write") {
   const ctx = await apiContext(need);
   if (ctx instanceof NextResponse) return ctx;
+  // Sending calls Resend (and counts against its quota); previewing is free.
+  if (need === "write") {
+    const limited = paidLimit("digest", ctx);
+    if (limited) return limited;
+  }
   const data = await read();
   if (!canSeeProfile(data, ctx, id)) return null;
   const profile = data.profiles.find((p) => p.id === id);
